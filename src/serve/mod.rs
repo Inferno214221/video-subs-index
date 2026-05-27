@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, convert::Infallible};
 use ct_regex::{Regex, regex};
 use derive_more::{AsRef, Deref, Display};
 use macron_path::path;
-use rocket::{Request, State, fs::NamedFile, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::status::Created, serde::json::Json};
+use rocket::{Request, State, fs::NamedFile, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::status::{BadRequest, Created}, serde::json::Json};
 use srt_subtitles_parser::Subtitle;
 
 use crate::{CONTENT_ROOT, video::{MediaIndex, SubList, slice_video}};
@@ -32,16 +32,31 @@ impl<'r> FromParam<'r> for Id<'r> {
     }
 }
 
-pub struct GifContentType;
+pub struct ImplicitGif;
 
 #[rocket::async_trait]
-impl<'r> FromRequest<'r> for &'r GifContentType {
+impl<'r> FromRequest<'r> for &'r ImplicitGif {
     type Error = Infallible;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Infallible> {
         match request.content_type() {
-            Some(content_type) if content_type.is_gif() => Outcome::Success(&GifContentType),
-            None => Outcome::Success(&GifContentType),
+            Some(content_type) if content_type.is_gif() => Outcome::Success(&ImplicitGif),
+            None => Outcome::Success(&ImplicitGif),
+            _ => Outcome::Forward(Status::NotAcceptable),
+        }
+    }
+}
+
+pub struct ImplicitHtml;
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for &'r ImplicitHtml {
+    type Error = Infallible;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Infallible> {
+        match request.content_type() {
+            Some(content_type) if content_type.is_gif() => Outcome::Success(&ImplicitHtml),
+            None => Outcome::Success(&ImplicitHtml),
             _ => Outcome::Forward(Status::NotAcceptable),
         }
     }
@@ -52,27 +67,11 @@ pub async fn view_content<'r>(
     media: Id<'r>,
     episode: Id<'r>,
     artifact: usize,
-    _gif: &GifContentType,
-    index: &State<MediaIndex>,
+    _gif: &ImplicitGif,
 ) -> Option<NamedFile> {
-    let target = path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif");
-
-    if let Ok(file) = NamedFile::open(&target).await {
-        Some(file)
-    } else {
-        let sub = index.get(*media)?
-            .get(*episode)?
-            .list
-            .get(artifact - 1)?;
-
-        slice_video(
-            path!("{CONTENT_ROOT}/{media}/{episode}.mkv"),
-            path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif"),
-            sub
-        );
-
-        NamedFile::open(target).await.ok()
-    }
+    NamedFile::open(
+        path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif")
+    ).await.ok()
 }
 
 #[put("/content/<media>/<episode>/<artifact>")]
@@ -83,6 +82,8 @@ pub fn create_content<'s>(
     index: &'s State<MediaIndex>,
     origin: &Origin,
 ) -> Option<Created<Json<&'s Subtitle>>> {
+    let target = path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif");
+
     let sub = index.get(*media)?
         .get(*episode)?
         .list
@@ -90,11 +91,9 @@ pub fn create_content<'s>(
 
     slice_video(
         path!("{CONTENT_ROOT}/{media}/{episode}.mkv"),
-        path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif"),
+        target,
         sub
     );
-
-    // TODO: Don't block
 
     Some(
         Created::new(origin.path().as_str().to_owned())
@@ -136,12 +135,12 @@ pub fn search_media<'s>(
 
 #[get("/search?<q>")]
 #[allow(unused_variables)]
-pub fn search_all(q: &str) -> (Status, &'static str) {
-    (Status::BadRequest, "Search without a specified media source is not allowed")
+pub fn search_all(q: &str) -> BadRequest<&'static str> {
+    BadRequest("Search without a specified media source is not allowed")
 }
 
 #[get("/search")]
-pub fn search_page() -> String {
+pub fn search_page(_html: &ImplicitHtml) -> String {
     "Search page".into()
 }
 

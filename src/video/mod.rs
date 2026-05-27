@@ -1,11 +1,12 @@
-use std::{collections::BTreeMap, env, fs, iter, path::Path, process::{Command, Stdio}, range::RangeInclusive, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs, iter, path::Path, range::RangeInclusive, sync::Arc, time::Duration};
 
 use ct_regex::{AnonRegex, regex};
 use derive_more::{Deref, DerefMut};
 use ffmpeg_light::{Time, TranscodeBuilder};
+use macron_path::path;
 use srt_subtitles_parser::{self as srt, Subtitle, Timestamp};
 
-use crate::serve;
+use crate::CONTENT_ROOT;
 
 pub fn normalize_sub(text: &str) -> String {
     let mut text = text.to_lowercase();
@@ -22,11 +23,11 @@ pub fn collect_words(text: &str) -> Vec<String> {
 }
 
 #[derive(Debug, Clone, Default, Deref, DerefMut)]
-pub struct MediaIndex(pub BTreeMap<String, BTreeMap<String, SubIndex>>);
+pub struct MediaIndex(pub BTreeMap<String, BTreeMap<String, SubData>>);
 
 impl MediaIndex {
     pub fn build_from_fs() -> MediaIndex {
-        let media_entries: Vec<_> = fs::read_dir(serve::CONTENT_ROOT)
+        let media_entries: Vec<_> = fs::read_dir(CONTENT_ROOT)
             .expect("unable to read content root")
             .try_collect()
             .expect("unable to read contents of content root");
@@ -41,7 +42,7 @@ impl MediaIndex {
                 panic!("content root contains non-dir")
             }
 
-            let media_path = Path::new(serve::CONTENT_ROOT).join(media.file_name());
+            let media_path = path!("{CONTENT_ROOT}/{media_name}");
 
             let episode_entries: Vec<_> = fs::read_dir(&media_path)
                 .expect("unable to read media dir")
@@ -65,8 +66,8 @@ impl MediaIndex {
                     fs::exists(episode_path.with_extension("mkv")),
                     fs::exists(episode_path.with_extension("srt"))
                 ) {
-                    let sub_index = SubIndex::from_sub_file(
-                        format!("{}/{}/{}.srt", serve::CONTENT_ROOT, media_name, episode)
+                    let sub_index = SubData::from_file(
+                        path!("{CONTENT_ROOT}/{media_name}/{episode}.srt")
                     );
                     (episode, sub_index)
                 } else {
@@ -100,14 +101,72 @@ impl From<(String, WordMetadata)> for WordMap {
 pub struct SubIndex(pub Vec<WordMap>);
 
 impl SubIndex {
-    pub fn from_sub_file(sub_path: impl AsRef<Path>) -> SubIndex {
-        let subs = srt::parse_srt(&fs::read_to_string(sub_path).unwrap()).unwrap()
+    pub fn binary_search(&self, word: &str) -> Option<usize> {
+        self.binary_search_by_key(&word, |map| map.word.as_str()).ok()
+    }
+
+    pub fn find_next_word(&self, index: usize, word: &str) -> Option<usize> {
+        self[index].metadata.keys()
+            .find(|&&key| self[key].word == word)
+            .copied()
+    }
+
+    pub fn search_subs<'w, 'i>(
+        &'w self,
+        search: impl Iterator<Item = &'i str>
+    ) -> SubList {
+        let mut search = search.peekable();
+        let Some(first) = search.next() else {
+            return Vec::new();
+        };
+        let Some(mut index) = self.binary_search(first) else {
+            return Vec::new();
+        };
+
+        let mut collected_subs: Vec<_> = self[index].metadata.values().collect();
+
+        for word in search {
+            // dbg!(&word);
+            index = match self.find_next_word(index, word) {
+                Some(i) => i,
+                None => return Vec::new(),
+            };
+
+            let new_subs: Vec<_> = self[index].metadata.values().collect();
+
+            // dbg!(&new_subs.iter().map(|i| &i.text).collect::<Vec<_>>());
+
+            collected_subs.retain(|sub| new_subs.contains(sub));
+        }
+
+        collected_subs.into_iter()
+            .cloned()
+            .collect()
+    }
+
+    pub fn search_with_query(&self, query: &str) -> SubList {
+        let query_words = collect_words(&normalize_sub(query));
+        self.search_subs(query_words.iter().map(String::as_str))
+    }
+}
+
+pub type SubList = Vec<Arc<Subtitle>>;
+
+#[derive(Debug, Clone)]
+pub struct SubData {
+    pub list: SubList,
+    pub index: SubIndex,
+}
+
+impl SubData {
+    pub fn from_file(sub_path: impl AsRef<Path>) -> SubData {
+        let list = srt::parse_srt(&fs::read_to_string(sub_path).unwrap()).unwrap()
             .subtitles
             .into_iter()
             .map(Arc::new)
             .collect::<Vec<_>>();
 
-        let text = subs.iter().map(|sub| (
+        let text = list.iter().map(|sub| (
             sub,
             normalize_sub(&sub.text)
         ));
@@ -142,57 +201,10 @@ impl SubIndex {
                 .last();
         }
 
-        words
-    }
-
-    pub fn binary_search(&self, word: &str) -> Option<usize> {
-        self.binary_search_by_key(&word, |map| map.word.as_str()).ok()
-    }
-
-    pub fn find_next_word(&self, index: usize, word: &str) -> Option<usize> {
-        self[index].metadata.keys()
-            .find(|&&key| self[key].word == word)
-            .copied()
-    }
-
-    pub fn search_subs<'w, 'i>(
-        &'w self,
-        search: impl Iterator<Item = &'i str>
-    ) -> Vec<Arc<Subtitle>> {
-        let mut search = search.peekable();
-        let Some(first) = search.next() else {
-            return Vec::new();
-        };
-        let Some(mut index) = self.binary_search(first) else {
-            return Vec::new();
-        };
-
-        let mut collected_subs: Vec<_> = self[index].metadata.values().collect();
-
-        for word in search {
-            // dbg!(&word);
-            index = match self.find_next_word(index, word) {
-                Some(i) => i,
-                None => return Vec::new(),
-            };
-
-            let new_subs: Vec<_> = self[index].metadata.values().collect();
-
-            // dbg!(&new_subs.iter().map(|i| &i.text).collect::<Vec<_>>());
-
-            collected_subs.retain(|sub| new_subs.contains(sub));
+        SubData {
+            list,
+            index: words,
         }
-
-        collected_subs.into_iter()
-            .cloned()
-            .collect()
-    }
-
-    pub fn search_with_query(&self, query: &str) -> impl Iterator<Item = Subtitle> {
-        let query_words = collect_words(&normalize_sub(query));
-        self.search_subs(query_words.iter().map(String::as_str))
-            .into_iter()
-            .map(|sub| (*sub).clone())
     }
 }
 
@@ -202,15 +214,19 @@ pub fn convert_timestamp_with_offset(ts: &Timestamp, millis: i64) -> Time {
     ).into()
 }
 
-pub fn slice_video(video_path: impl AsRef<Path>, target: &Subtitle) {
-    slice_video_range(video_path, (target..=target).into());
+pub fn slice_video(source: impl AsRef<Path>, target: impl AsRef<Path>, sub: &Subtitle) {
+    slice_video_range(source, target, (sub..=sub).into());
 }
 
-pub fn slice_video_range(video_path: impl AsRef<Path>, target: RangeInclusive<&Subtitle>) {
-    let RangeInclusive { start: first, last } = target;
+pub fn slice_video_range(
+    source: impl AsRef<Path>,
+    target: impl AsRef<Path>,
+    sub_range: RangeInclusive<&Subtitle>
+) {
+    let RangeInclusive { start: first, last } = sub_range;
     TranscodeBuilder::new()
-        .input(video_path)
-        .output("./output.mkv")
+        .input(source)
+        .output(target)
         .overwrite(true)
         .extra_arg("-ss")
         .extra_arg(format!("{}", convert_timestamp_with_offset(&first.start, 0)))
@@ -218,29 +234,4 @@ pub fn slice_video_range(video_path: impl AsRef<Path>, target: RangeInclusive<&S
         .extra_arg(format!("{}", convert_timestamp_with_offset(&last.end, -0)))
         .run()
         .unwrap();
-}
-
-fn _main() {
-    let args: Vec<_> = env::args().skip(1).collect();
-
-    // let target = subs.subtitles[1066].clone();
-    // dbg!(&target);
-
-    let words = SubIndex::from_sub_file("./e01.srt");
-
-    let collected_subs = words.search_subs(args.iter().map(String::as_str));
-
-    dbg!(&collected_subs);
-
-    if let [target] = &*collected_subs {
-        slice_video("./e01.mkv", target);
-
-        let _ = Command::new("vlc")
-            .arg("./output.mkv")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-    } else {
-        println!("ambiguous search results!")
-    }
 }

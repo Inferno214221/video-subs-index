@@ -746,6 +746,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "macron-path"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40c9df1283060d6cbf9be984f35aac5936eb75a3ca28b1082f19a5c6a49424d6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1711,7 +1722,9 @@ dependencies = [
  "ct-regex",
  "derive_more",
  "ffmpeg-light",
+ "macron-path",
  "rocket",
+ "serde",
  "srt_subtitles_parser",
 ]
 

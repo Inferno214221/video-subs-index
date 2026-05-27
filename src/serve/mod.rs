@@ -1,13 +1,14 @@
 // TODO: content-types html, json, gif
 
-use std::{collections::BTreeMap, convert::Infallible, path::PathBuf};
+use std::{collections::BTreeMap, convert::Infallible};
 
 use ct_regex::{Regex, regex};
 use derive_more::{AsRef, Deref, Display};
-use rocket::{Request, State, fs::{NamedFile, relative}, http::Status, request::{FromParam, FromRequest, Outcome}, serde::json::Json};
+use macron_path::path;
+use rocket::{Request, State, fs::NamedFile, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::status::Created, serde::json::Json};
 use srt_subtitles_parser::Subtitle;
 
-use crate::video::MediaIndex;
+use crate::{CONTENT_ROOT, video::{MediaIndex, SubList, slice_video}};
 
 // TODO: Catchers for 404, 406, 400, 500
 
@@ -15,22 +16,16 @@ regex!{
     pub AlphaNumeric = r"[\w\-]+"
 }
 
-pub const CONTENT_ROOT: &str = relative!("content");
-
 #[derive(Debug, Display, Deref, AsRef)]
 #[as_ref(forward)]
-pub struct Id<'r> {
-    pub name: &'r str,
-}
+pub struct Id<'r>(pub &'r str);
 
 impl<'r> FromParam<'r> for Id<'r> {
     type Error = ();
 
     fn from_param(param: &'r str) -> Result<Self, Self::Error> {
         if AlphaNumeric::is_match(param) {
-            Ok(Id {
-                name: param,
-            })
+            Ok(Id(param))
         } else {
             Err(())
         }
@@ -38,7 +33,6 @@ impl<'r> FromParam<'r> for Id<'r> {
 }
 
 pub struct GifContentType;
-
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for &'r GifContentType {
@@ -53,51 +47,88 @@ impl<'r> FromRequest<'r> for &'r GifContentType {
     }
 }
 
-#[get("/content/<media>/<episode>/<id>")]
+#[get("/content/<media>/<episode>/<artifact>")]
 pub async fn view_content<'r>(
     media: Id<'r>,
     episode: Id<'r>,
-    id: Id<'r>,
-    _gif: &'r GifContentType
+    artifact: usize,
+    _gif: &GifContentType,
+    index: &State<MediaIndex>,
 ) -> Option<NamedFile> {
-    NamedFile::open(
-        [CONTENT_ROOT, &media, &episode, &id]
-            .iter()
-            .collect::<PathBuf>()
-    ).await.ok()
+    let target = path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif");
+
+    if let Ok(file) = NamedFile::open(&target).await {
+        Some(file)
+    } else {
+        let sub = index.get(*media)?
+            .get(*episode)?
+            .list
+            .get(artifact - 1)?;
+
+        slice_video(
+            path!("{CONTENT_ROOT}/{media}/{episode}.mkv"),
+            path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif"),
+            sub
+        );
+
+        NamedFile::open(target).await.ok()
+    }
 }
 
-#[put("/content/<media>/<episode>/<id>")]
-pub fn create_content(media: &str, episode: &str, id: &str) -> (Status, String) {
-    // TODO: Auth
-    (Status::Ok, format!("Creating {}, {}, {}", media, episode, id))
+#[put("/content/<media>/<episode>/<artifact>")]
+pub fn create_content<'s>(
+    media: Id,
+    episode: Id,
+    artifact: usize,
+    index: &'s State<MediaIndex>,
+    origin: &Origin,
+) -> Option<Created<Json<&'s Subtitle>>> {
+    let sub = index.get(*media)?
+        .get(*episode)?
+        .list
+        .get(artifact - 1)?;
+
+    slice_video(
+        path!("{CONTENT_ROOT}/{media}/{episode}.mkv"),
+        path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif"),
+        sub
+    );
+
+    // TODO: Don't block
+
+    Some(
+        Created::new(origin.path().as_str().to_owned())
+            .body(Json(sub))
+    )
 }
 
 #[get("/search/<media>/<episode>?<q>")]
-pub fn search_episode<'r>(
-    media: Id<'r>,
-    episode: Id<'r>,
-    q: &'r str,
-    index: &'r State<MediaIndex>
-) -> Option<Json<Vec<Subtitle>>> {
+pub fn search_episode(
+    media: Id,
+    episode: Id,
+    q: &str,
+    index: &State<MediaIndex>
+) -> Option<Json<SubList>> {
     Some(Json(
         index.get(*media)?
             .get(*episode)?
-            .search_with_query(q).collect()
+            .index
+            .search_with_query(q)
     ))
 }
 
 #[get("/search/<media>?<q>")]
-pub fn search_media<'r>(
-    media: Id<'r>,
-    q: &'r str,
-    index: &'r State<MediaIndex>
-) -> Option<Json<BTreeMap<String, Vec<Subtitle>>>> {
+pub fn search_media<'s>(
+    media: Id,
+    q: &str,
+    index: &'s State<MediaIndex>
+) -> Option<Json<BTreeMap<&'s str, SubList>>> {
     Some(Json(
-        index.get(*media)?.iter()
-            .map(|(episode, index)| (
-                episode.clone(),
-                index.search_with_query(q).collect()
+        index.get(*media)?
+            .iter()
+            .map(|(episode, data)| (
+                episode.as_str(),
+                data.index.search_with_query(q)
             ))
             .collect()
     ))
@@ -115,16 +146,33 @@ pub fn search_page() -> String {
 }
 
 #[get("/list/<media>/<episode>")]
-pub fn list_subtitles(media: &str, episode: &str) -> String {
-    format!("List of subtitles for {}, {}", media, episode)
+pub fn list_subtitles<'s>(
+    media: Id,
+    episode: Id,
+    index: &'s State<MediaIndex>
+) -> Option<Json<&'s SubList>> {
+    Some(Json(
+        &index.get(*media)?
+            .get(*episode)?
+            .list
+    ))
 }
 
 #[get("/list/<media>")]
-pub fn list_episodes(media: &str) -> String {
-    format!("List of episodes for {}", media)
+pub fn list_episodes<'s>(media: Id, index: &'s State<MediaIndex>) -> Option<Json<Vec<&'s str>>> {
+    Some(Json(
+        index.get(*media)?
+            .keys()
+            .map(String::as_str)
+            .collect()
+    ))
 }
 
 #[get("/list")]
-pub fn list_media() -> String {
-    "List of media".into()
+pub fn list_media(index: &State<MediaIndex>) -> Option<Json<Vec<&str>>> {
+    Some(Json(
+        index.keys()
+            .map(String::as_str)
+            .collect()
+    ))
 }

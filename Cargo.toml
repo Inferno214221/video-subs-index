@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 ffmpeg-light = "0.2.0"
+rocket = "0.5.1"
 srt_subtitles_parser = "0.1.3"

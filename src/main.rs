@@ -5,15 +5,77 @@ use std::{collections::BTreeMap, env, fs, iter, process::{Command, Stdio}, rc::R
 use ffmpeg_light::{Time, TranscodeBuilder};
 use srt_subtitles_parser::{self as srt, Subtitle, Timestamp};
 
-pub fn start_time(ts: &Timestamp) -> Time {
-    Duration::from_millis(ts.to_ms()).into()
+#[macro_use] extern crate rocket;
+
+pub fn convert_timestamp_with_offset(ts: &Timestamp, millis: i64) -> Time {
+    Duration::from_millis(
+        ts.to_ms().checked_add_signed(millis).unwrap()
+    ).into()
 }
 
-pub fn end_time(ts: &Timestamp) -> Time {
-    Duration::from_millis(ts.to_ms()).into()
+#[get("/content/<media>/<episode>/<id>")]
+pub fn view_content(media: &str, episode: &str, id: &str) -> String {
+    // Maybe just file server for this bit honestly, cause it need to be exclusively cached results
+    format!("Accessing {}, {}, {}", media, episode, id)
 }
 
-fn main() {
+#[put("/content/<media>/<episode>/<id>")]
+pub fn create_content(media: &str, episode: &str, id: &str) -> String {
+    // TODO: Auth
+    format!("Creating {}, {}, {}", media, episode, id)
+}
+
+#[get("/search/<media>/<episode>?<q>")]
+pub fn search_episode(media: &str, episode: &str, q: &str) -> String {
+    format!("Searching {}, {} for {}", media, episode, q)
+}
+
+#[get("/search/<media>?<q>")]
+pub fn search_media(media: &str, q: &str) -> String {
+    format!("Searching {} for {}", media, q)
+}
+
+#[get("/search?<q>")]
+pub fn search_all(q: &str) -> String {
+    todo!("Explicitly deny")
+}
+
+#[get("/search")]
+pub fn search_page() -> String {
+    "Search page".into()
+}
+
+#[get("/list/<media>/<episode>")]
+pub fn list_subtitles(media: &str, episode: &str) -> String {
+    format!("List of subtitles for {}, {}", media, episode)
+}
+
+#[get("/list/<media>")]
+pub fn list_episodes(media: &str) -> String {
+    format!("List of episodes for {}", media)
+}
+
+#[get("/list")]
+pub fn list_media() -> String {
+    "List of media".into()
+}
+
+#[launch]
+fn rocket() -> _ {
+    rocket::build().mount("/", routes![
+        view_content,
+        create_content,
+        search_episode,
+        search_media,
+        search_all,
+        search_page,
+        list_subtitles,
+        list_episodes,
+        list_media
+    ])
+}
+
+fn _main() {
     let args = env::args().skip(1);
 
     let subs = srt::parse_srt(
@@ -54,6 +116,7 @@ fn main() {
     ).collect::<Vec<_>>();
 
     for (sub, line) in lines.iter() {
+        println!("{:?}", line);
         line.iter()
             .map(|word| all_words.binary_search_by_key(&word, |(key, _)| key).unwrap())
             .collect::<Vec<_>>()
@@ -73,9 +136,10 @@ fn main() {
     let mut collected_subs = all_words[index].1.values().collect::<Vec<_>>();
 
     for word in search {
-        index = *all_words[index].1.keys().find(|&key| all_words[*key].0 == word).unwrap();
+        dbg!(&word);
+        index = *all_words[index].1.keys().find(|&key| dbg!(&all_words[*key].0) == &word).unwrap();
         let new_subs = all_words[index].1.values().collect::<Vec<_>>();
-        // dbg!(&new_subs.iter().map(|i| &i.text).collect::<Vec<_>>());
+        dbg!(&new_subs.iter().map(|i| &i.text).collect::<Vec<_>>());
         // if !new_subs.is_empty() {
         //     collected_subs.retain(|sub| new_subs.contains(sub));
         // } else {
@@ -92,9 +156,9 @@ fn main() {
             .output("./output.mkv")
             .overwrite(true)
             .extra_arg("-ss")
-            .extra_arg(format!("{}", start_time(&target.start)))
+            .extra_arg(format!("{}", convert_timestamp_with_offset(&target.start, 0)))
             .extra_arg("-to")
-            .extra_arg(format!("{}", end_time(&target.end)))
+            .extra_arg(format!("{}", convert_timestamp_with_offset(&target.end, -0)))
             .run()
             .unwrap();
 

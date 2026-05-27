@@ -1,10 +1,11 @@
-use std::{collections::BTreeMap, env, fs, iter, path::Path, process::{Command, Stdio}, rc::Rc, time::Duration};
+use std::{collections::BTreeMap, env, fs, iter, path::Path, process::{Command, Stdio}, range::RangeInclusive, sync::Arc, time::Duration};
 
 use ct_regex::{AnonRegex, regex};
+use derive_more::{Deref, DerefMut};
 use ffmpeg_light::{Time, TranscodeBuilder};
 use srt_subtitles_parser::{self as srt, Subtitle, Timestamp};
 
-type SubIndex = Vec<(String, BTreeMap<usize, Rc<Subtitle>>)>;
+use crate::serve;
 
 pub fn normalize_sub(text: &str) -> String {
     let mut text = text.to_lowercase();
@@ -20,73 +21,179 @@ pub fn collect_words(text: &str) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-pub fn index_words(sub_path: impl AsRef<Path>) -> SubIndex {
-    let subs = srt::parse_srt(&fs::read_to_string(sub_path).unwrap()).unwrap()
-        .subtitles
-        .into_iter()
-        .map(Rc::new)
-        .collect::<Vec<_>>();
+#[derive(Debug, Clone, Default, Deref, DerefMut)]
+pub struct MediaIndex(pub BTreeMap<String, BTreeMap<String, SubIndex>>);
 
-    let text = subs.iter().map(|sub| (
-        sub,
-        normalize_sub(&sub.text)
-    ));
+impl MediaIndex {
+    pub fn build_from_fs() -> MediaIndex {
+        let media_entries: Vec<_> = fs::read_dir(serve::CONTENT_ROOT)
+            .expect("unable to read content root")
+            .try_collect()
+            .expect("unable to read contents of content root");
 
-    let lines = text.map(|(sub, text)| (
-        sub,
-        collect_words(&text)
-    )).collect::<Vec<_>>();
+        let mut media_index = MediaIndex(BTreeMap::new());
 
-    let mut words = iter::once(("".to_owned(), BTreeMap::new())).chain(
-        lines.iter()
-            .flat_map(|(_, line)| {
-                line.iter()
-                    .cloned()
-                    .zip(iter::repeat(BTreeMap::new()))
-            })
-            .collect::<BTreeMap<String, BTreeMap<usize, Rc<Subtitle>>>>()
-    ).collect::<Vec<_>>();
+        for media in media_entries {
+            let Ok(media_name) = media.file_name().into_string() else {
+                panic!("invalid media name")
+            };
+            if !media.file_type().unwrap().is_dir() {
+                panic!("content root contains non-dir")
+            }
 
-    for (sub, line) in lines.iter() {
-        println!("{:?}", line);
-        line.iter()
-            .map(|word| words.binary_search_by_key(&word, |(key, _)| key).unwrap())
-            .collect::<Vec<_>>()
-            .into_iter()
-            .chain(iter::once(0))
-            .map_windows(|[a, b]| words[*a].1.insert(*b, (*sub).clone()))
-            .last();
+            let media_path = Path::new(serve::CONTENT_ROOT).join(media.file_name());
+
+            let episode_entries: Vec<_> = fs::read_dir(&media_path)
+                .expect("unable to read media dir")
+                .try_collect()
+                .expect("unable to read contents of media dir");
+
+            let episode_dirs = episode_entries.iter()
+                .filter_map(
+                    |entry| entry.file_type().ok().and_then(
+                        |file_type| if file_type.is_dir() {
+                            entry.file_name().into_string().ok()
+                        } else {
+                            None
+                        }
+                    )
+                );
+
+            let episode_index = episode_dirs.map(|episode| {
+                let episode_path = media_path.join(&episode);
+                if let (Ok(true), Ok(true)) = (
+                    fs::exists(episode_path.with_extension("mkv")),
+                    fs::exists(episode_path.with_extension("srt"))
+                ) {
+                    let sub_index = SubIndex::from_sub_file(
+                        format!("{}/{}/{}.srt", serve::CONTENT_ROOT, media_name, episode)
+                    );
+                    (episode, sub_index)
+                } else {
+                    panic!("missing required files for episode")
+                }
+            }).collect();
+
+            media_index.insert(media_name.clone(), episode_index);
+        }
+
+        media_index
     }
-
-    words
 }
 
-pub fn search_subs<'w, 'i>(
-    words: &'w SubIndex,
-    search: impl Iterator<Item = &'i str>
-) -> Vec<Rc<Subtitle>> {
-    let mut search = search.peekable();
+#[derive(Debug, Default, Clone, Deref, DerefMut)]
+pub struct WordMetadata(pub BTreeMap<usize, Arc<Subtitle>>);
 
-    let mut index = words.binary_search_by_key(
-        &search.next().unwrap(),
-        |(key, _)| key
-    ).unwrap();
+#[derive(Debug, Clone)]
+pub struct WordMap {
+    pub word: String,
+    pub metadata: WordMetadata,
+}
 
-    let mut collected_subs: Vec<_> = words[index].1.values().collect();
+impl From<(String, WordMetadata)> for WordMap {
+    fn from((word, metadata): (String, WordMetadata)) -> Self {
+        WordMap { word, metadata }
+    }
+}
 
-    for word in search {
-        dbg!(&word);
-        index = *words[index].1.keys().find(|&key| words[*key].0 == word).unwrap();
-        let new_subs: Vec<_> = words[index].1.values().collect();
+#[derive(Debug, Clone, Deref, DerefMut)]
+pub struct SubIndex(pub Vec<WordMap>);
 
-        dbg!(&new_subs.iter().map(|i| &i.text).collect::<Vec<_>>());
+impl SubIndex {
+    pub fn from_sub_file(sub_path: impl AsRef<Path>) -> SubIndex {
+        let subs = srt::parse_srt(&fs::read_to_string(sub_path).unwrap()).unwrap()
+            .subtitles
+            .into_iter()
+            .map(Arc::new)
+            .collect::<Vec<_>>();
 
-        collected_subs.retain(|sub| new_subs.contains(sub));
+        let text = subs.iter().map(|sub| (
+            sub,
+            normalize_sub(&sub.text)
+        ));
+
+        let lines = text.map(|(sub, text)| (
+            sub,
+            collect_words(&text)
+        )).collect::<Vec<_>>();
+
+        let mut words = SubIndex(
+            iter::once(("".to_owned(), WordMetadata::default()))
+                .chain(
+                    lines.iter()
+                        .flat_map(|(_, line)| {
+                            line.iter()
+                                .cloned()
+                                .zip(iter::repeat(WordMetadata::default()))
+                        })
+                        .collect::<BTreeMap<String, WordMetadata>>()
+                ).map(WordMap::from)
+                .collect::<Vec<_>>()
+        );
+
+        for (sub, line) in lines.iter() {
+            println!("{:?}", line);
+            line.iter()
+                .map(|word| words.binary_search(word).unwrap())
+                .collect::<Vec<_>>()
+                .into_iter()
+                .chain(iter::once(0))
+                .map_windows(|&[a, b]| words[a].metadata.insert(b, (*sub).clone()))
+                .last();
+        }
+
+        words
     }
 
-    collected_subs.into_iter()
-        .cloned()
-        .collect()
+    pub fn binary_search(&self, word: &str) -> Option<usize> {
+        self.binary_search_by_key(&word, |map| map.word.as_str()).ok()
+    }
+
+    pub fn find_next_word(&self, index: usize, word: &str) -> Option<usize> {
+        self[index].metadata.keys()
+            .find(|&&key| self[key].word == word)
+            .copied()
+    }
+
+    pub fn search_subs<'w, 'i>(
+        &'w self,
+        search: impl Iterator<Item = &'i str>
+    ) -> Vec<Arc<Subtitle>> {
+        let mut search = search.peekable();
+        let Some(first) = search.next() else {
+            return Vec::new();
+        };
+        let Some(mut index) = self.binary_search(first) else {
+            return Vec::new();
+        };
+
+        let mut collected_subs: Vec<_> = self[index].metadata.values().collect();
+
+        for word in search {
+            // dbg!(&word);
+            index = match self.find_next_word(index, word) {
+                Some(i) => i,
+                None => return Vec::new(),
+            };
+
+            let new_subs: Vec<_> = self[index].metadata.values().collect();
+
+            // dbg!(&new_subs.iter().map(|i| &i.text).collect::<Vec<_>>());
+
+            collected_subs.retain(|sub| new_subs.contains(sub));
+        }
+
+        collected_subs.into_iter()
+            .cloned()
+            .collect()
+    }
+
+    pub fn search_with_query(&self, query: &str) -> impl Iterator<Item = Subtitle> {
+        let query_words = collect_words(&normalize_sub(query));
+        self.search_subs(query_words.iter().map(String::as_str))
+            .into_iter()
+            .map(|sub| (*sub).clone())
+    }
 }
 
 pub fn convert_timestamp_with_offset(ts: &Timestamp, millis: i64) -> Time {
@@ -96,14 +203,19 @@ pub fn convert_timestamp_with_offset(ts: &Timestamp, millis: i64) -> Time {
 }
 
 pub fn slice_video(video_path: impl AsRef<Path>, target: &Subtitle) {
+    slice_video_range(video_path, (target..=target).into());
+}
+
+pub fn slice_video_range(video_path: impl AsRef<Path>, target: RangeInclusive<&Subtitle>) {
+    let RangeInclusive { start: first, last } = target;
     TranscodeBuilder::new()
         .input(video_path)
         .output("./output.mkv")
         .overwrite(true)
         .extra_arg("-ss")
-        .extra_arg(format!("{}", convert_timestamp_with_offset(&target.start, 0)))
+        .extra_arg(format!("{}", convert_timestamp_with_offset(&first.start, 0)))
         .extra_arg("-to")
-        .extra_arg(format!("{}", convert_timestamp_with_offset(&target.end, -0)))
+        .extra_arg(format!("{}", convert_timestamp_with_offset(&last.end, -0)))
         .run()
         .unwrap();
 }
@@ -114,9 +226,9 @@ fn _main() {
     // let target = subs.subtitles[1066].clone();
     // dbg!(&target);
 
-    let words = index_words("./e01.srt");
+    let words = SubIndex::from_sub_file("./e01.srt");
 
-    let collected_subs = search_subs(&words, args.iter().map(String::as_str));
+    let collected_subs = words.search_subs(args.iter().map(String::as_str));
 
     dbg!(&collected_subs);
 

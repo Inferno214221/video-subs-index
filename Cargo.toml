@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ct-regex = { git = "https://github.com/Inferno214221/compile-time-regex.git", features = [] }
+derive_more = { version = "2.1.1", features = ["as_ref", "deref", "deref_mut", "display"] }
 ffmpeg-light = "0.2.0"
-rocket = "0.5.1"
+rocket = { version = "0.5.1", features = ["json"] }
 srt_subtitles_parser = "0.1.3"

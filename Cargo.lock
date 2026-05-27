@@ -1092,6 +1092,7 @@ dependencies = [
  "rocket_codegen",
  "rocket_http",
  "serde",
+ "serde_json",
  "state",
  "tempfile",
  "time",
@@ -1708,6 +1709,7 @@ name = "video-subs-index"
 version = "0.1.0"
 dependencies = [
  "ct-regex",
+ "derive_more",
  "ffmpeg-light",
  "rocket",
  "srt_subtitles_parser",

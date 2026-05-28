@@ -17,7 +17,8 @@ fn rocket() -> _ {
                 search_page,
                 list_subtitles,
                 list_episodes,
-                list_media
+                list_media,
+                global_css
             ]
         )
 }

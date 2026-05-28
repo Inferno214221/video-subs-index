@@ -1,11 +1,12 @@
 // TODO: content-types html, json, gif
 
-use std::{collections::BTreeMap, convert::Infallible, num::ParseIntError};
+use std::{collections::BTreeMap, convert::Infallible, num::ParseIntError, path::Path};
 
 use ct_regex::{Regex, regex};
 use derive_more::{AsRef, Deref, Display, Error, From};
+use hypertext::prelude::*;
 use macron_path::path;
-use rocket::{Request, State, fs::NamedFile, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::status::{BadRequest, Created}, serde::json::Json};
+use rocket::{Request, State, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::{Responder, content::RawHtml, status::{BadRequest, Created}}, serde::json::Json, tokio::fs::File};
 
 use crate::{CONTENT_ROOT, video::{MediaIndex, Sub, slice_video}};
 
@@ -88,17 +89,29 @@ impl<'r> FromRequest<'r> for &'r ImplicitHtml {
     }
 }
 
+#[derive(Debug, Deref, Responder)]
+#[response(content_type = "image/gif")]
+pub struct Gif(pub File);
+
+impl Gif {
+    pub async fn open(path: impl AsRef<Path>) -> Option<Gif> {
+        Some(Gif(
+            File::open(path).await.ok()?
+        ))
+    }
+}
+
 #[get("/content/<media>/<episode>/<artifact>")]
 pub async fn view_content<'r>(
     media: Id<'r>,
     episode: Id<'r>,
     artifact: ArtifactId,
     _gif: &ImplicitGif,
-) -> Option<NamedFile> {
-    NamedFile::open(
-        path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif")
-    ).await.ok()
+) -> Option<Gif> {
+    Gif::open(path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif")).await
 }
+
+pub type CreatedSub<'s> = Created<Json<&'s Sub>>;
 
 #[put("/content/<media>/<episode>/<artifact>")]
 pub fn create_content<'s>(
@@ -107,9 +120,7 @@ pub fn create_content<'s>(
     artifact: ArtifactId,
     index: &'s State<MediaIndex>,
     origin: &Origin,
-) -> Option<Created<Json<&'s Sub>>> {
-    let target = path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif");
-
+) -> Option<CreatedSub<'s>> {
     let sub = index.get(*media)?
         .get(*episode)?
         .list
@@ -117,7 +128,7 @@ pub fn create_content<'s>(
 
     slice_video(
         path!("{CONTENT_ROOT}/{media}/{episode}.mkv"),
-        target,
+        path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif"),
         sub
     );
 
@@ -160,14 +171,27 @@ pub fn search_media<'s>(
 }
 
 #[get("/search?<q>")]
-#[allow(unused_variables)]
 pub fn search_all(q: &str) -> BadRequest<&'static str> {
+    let _ = q;
     BadRequest("Search without a specified media source is not allowed")
 }
 
+#[derive(Debug, Responder, Deref)]
+pub struct Html(pub RawHtml<Rendered<String>>);
+
+impl Html {
+    pub fn render(from: impl Renderable) -> Html {
+        Html(RawHtml(from.render()))
+    }
+}
+
 #[get("/search")]
-pub fn search_page(_html: &ImplicitHtml) -> String {
-    "Search page".into()
+pub fn search_page(_html: &ImplicitHtml) -> Html {
+    Html::render(
+        rsx! {
+            <h1>Epic Search Page</h1>
+        }
+    )
 }
 
 #[get("/list/<media>/<episode>")]

@@ -1,9 +1,9 @@
 // TODO: content-types html, json, gif
 
-use std::{collections::BTreeMap, convert::Infallible};
+use std::{collections::BTreeMap, convert::Infallible, num::ParseIntError};
 
 use ct_regex::{Regex, regex};
-use derive_more::{AsRef, Deref, Display};
+use derive_more::{AsRef, Deref, Display, Error, From};
 use macron_path::path;
 use rocket::{Request, State, fs::NamedFile, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::status::{BadRequest, Created}, serde::json::Json};
 
@@ -19,14 +19,41 @@ regex!{
 #[as_ref(forward)]
 pub struct Id<'r>(pub &'r str);
 
+#[derive(Debug, Clone, Display, Error, From)]
+pub struct PatternMismatchError;
+
 impl<'r> FromParam<'r> for Id<'r> {
-    type Error = ();
+    type Error = PatternMismatchError;
 
     fn from_param(param: &'r str) -> Result<Self, Self::Error> {
         if AlphaNumeric::is_match(param) {
             Ok(Id(param))
         } else {
-            Err(())
+            Err(PatternMismatchError)
+        }
+    }
+}
+
+regex!{
+    pub ArtifactPattern = r"(?<num>\d+)(.gif)?"
+}
+
+#[derive(Debug, Clone, Copy, Display, Deref)]
+pub struct ArtifactId(pub usize);
+
+#[derive(Debug, Clone, Display, Error, From)]
+pub enum ArtifactIdError {
+    Pattern,
+    Parse(ParseIntError)
+}
+
+impl<'r> FromParam<'r> for ArtifactId {
+    type Error = ArtifactIdError;
+
+    fn from_param(param: &'r str) -> Result<Self, Self::Error> {
+        match ArtifactPattern::do_capture(param) {
+            Some(cap) => Ok(ArtifactId(cap.num().parse()?)),
+            None => Err(ArtifactIdError::Pattern),
         }
     }
 }
@@ -65,7 +92,7 @@ impl<'r> FromRequest<'r> for &'r ImplicitHtml {
 pub async fn view_content<'r>(
     media: Id<'r>,
     episode: Id<'r>,
-    artifact: usize,
+    artifact: ArtifactId,
     _gif: &ImplicitGif,
 ) -> Option<NamedFile> {
     NamedFile::open(
@@ -77,7 +104,7 @@ pub async fn view_content<'r>(
 pub fn create_content<'s>(
     media: Id,
     episode: Id,
-    artifact: usize,
+    artifact: ArtifactId,
     index: &'s State<MediaIndex>,
     origin: &Origin,
 ) -> Option<Created<Json<&'s Sub>>> {
@@ -86,7 +113,7 @@ pub fn create_content<'s>(
     let sub = index.get(*media)?
         .get(*episode)?
         .list
-        .get(artifact - 1)?;
+        .get(*artifact - 1)?;
 
     slice_video(
         path!("{CONTENT_ROOT}/{media}/{episode}.mkv"),

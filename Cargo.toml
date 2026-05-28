@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 ct-regex = { git = "https://github.com/Inferno214221/compile-time-regex.git", features = [] }
-derive_more = { version = "2.1.1", features = ["as_ref", "deref", "deref_mut", "display"] }
+derive_more = { version = "2.1.1", features = ["as_ref", "deref", "deref_mut", "display", "from"] }
 ffmpeg-light = "0.2.0"
 macron-path = "0.1.3"
 rocket = { version = "0.5.1", features = ["json"] }

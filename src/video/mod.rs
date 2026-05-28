@@ -83,7 +83,15 @@ impl MediaIndex {
 }
 
 #[derive(Debug, Default, Clone, Deref, DerefMut)]
-pub struct WordMetadata(pub BTreeMap<usize, Arc<Subtitle>>);
+pub struct WordMetadata(pub BTreeMap<usize, SubList>);
+
+impl WordMetadata {
+    pub fn values_flattened(&self) -> Vec<&Arc<Subtitle>> {
+        self.values()
+            .flatten()
+            .collect()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct WordMap {
@@ -123,7 +131,7 @@ impl SubIndex {
             return Vec::new();
         };
 
-        let mut collected_subs: Vec<_> = self[index].metadata.values().collect();
+        let mut collected_subs = self[index].metadata.values_flattened();
 
         for word in search {
             // dbg!(&word);
@@ -132,7 +140,7 @@ impl SubIndex {
                 None => return Vec::new(),
             };
 
-            let new_subs: Vec<_> = self[index].metadata.values().collect();
+            let new_subs = self[index].metadata.values_flattened();
 
             // dbg!(&new_subs.iter().map(|i| &i.text).collect::<Vec<_>>());
 
@@ -197,7 +205,12 @@ impl SubData {
                 .collect::<Vec<_>>()
                 .into_iter()
                 .chain(iter::once(0))
-                .map_windows(|&[a, b]| words[a].metadata.insert(b, (*sub).clone()))
+                .map_windows(|&[a, b]| {
+                    words[a].metadata
+                        .entry(b)
+                        .or_default()
+                        .push((*sub).clone())
+                })
                 .last();
         }
 

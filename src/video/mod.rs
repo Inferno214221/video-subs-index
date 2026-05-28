@@ -82,6 +82,11 @@ impl MediaIndex {
     }
 }
 
+pub type MutSubList = Vec<Arc<Subtitle>>;
+pub type SubList = Box<[Arc<Subtitle>]>;
+
+#[derive(Debug, Default, Clone, Deref, DerefMut)]
+pub struct MutWordMetadata(pub BTreeMap<usize, MutSubList>);
 #[derive(Debug, Default, Clone, Deref, DerefMut)]
 pub struct WordMetadata(pub BTreeMap<usize, SubList>);
 
@@ -93,20 +98,45 @@ impl WordMetadata {
     }
 }
 
-#[derive(Debug, Clone)]
+impl From<MutWordMetadata> for WordMetadata {
+    fn from(value: MutWordMetadata) -> Self {
+        WordMetadata(
+            value.0.into_iter()
+                .map(|(index, list)| (index, list.into()))
+                .collect()
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MutWordMap {
+    pub word: String,
+    pub metadata: MutWordMetadata,
+}
+#[derive(Debug, Clone, Default)]
 pub struct WordMap {
     pub word: String,
     pub metadata: WordMetadata,
 }
 
-impl From<(String, WordMetadata)> for WordMap {
-    fn from((word, metadata): (String, WordMetadata)) -> Self {
-        WordMap { word, metadata }
+impl From<(String, MutWordMetadata)> for MutWordMap {
+    fn from((word, metadata): (String, MutWordMetadata)) -> Self {
+        MutWordMap { word, metadata }
+    }
+}
+
+impl From<MutWordMap> for WordMap {
+    fn from(value: MutWordMap) -> Self {
+        WordMap { word: value.word, metadata: value.metadata.into() }
     }
 }
 
 #[derive(Debug, Clone, Deref, DerefMut)]
-pub struct SubIndex(pub Vec<WordMap>);
+pub struct SubIndex(pub Box<[WordMap]>);
+
+pub fn binary_search(slice: &[MutWordMap], word: &str) -> Option<usize> {
+    slice.binary_search_by_key(&word, |map| map.word.as_str()).ok()
+}
 
 impl SubIndex {
     pub fn binary_search(&self, word: &str) -> Option<usize> {
@@ -122,7 +152,7 @@ impl SubIndex {
     pub fn search_subs<'w, 'i>(
         &'w self,
         search: impl Iterator<Item = &'i str>
-    ) -> SubList {
+    ) -> MutSubList {
         let mut search = search.peekable();
         let Some(first) = search.next() else {
             return Vec::new();
@@ -152,13 +182,11 @@ impl SubIndex {
             .collect()
     }
 
-    pub fn search_with_query(&self, query: &str) -> SubList {
+    pub fn search_with_query(&self, query: &str) -> MutSubList {
         let query_words = collect_words(&normalize_sub(query));
         self.search_subs(query_words.iter().map(String::as_str))
     }
 }
-
-pub type SubList = Vec<Arc<Subtitle>>;
 
 #[derive(Debug, Clone)]
 pub struct SubData {
@@ -172,7 +200,7 @@ impl SubData {
             .subtitles
             .into_iter()
             .map(Arc::new)
-            .collect::<Vec<_>>();
+            .collect::<Box<[_]>>();
 
         let text = list.iter().map(|sub| (
             sub,
@@ -184,24 +212,23 @@ impl SubData {
             collect_words(&text)
         )).collect::<Vec<_>>();
 
-        let mut words = SubIndex(
-            iter::once(("".to_owned(), WordMetadata::default()))
-                .chain(
-                    lines.iter()
-                        .flat_map(|(_, line)| {
-                            line.iter()
-                                .cloned()
-                                .zip(iter::repeat(WordMetadata::default()))
-                        })
-                        .collect::<BTreeMap<String, WordMetadata>>()
-                ).map(WordMap::from)
-                .collect::<Vec<_>>()
-        );
+        let mut words = iter::once(MutWordMap::default())
+            .chain(
+                lines.iter()
+                    .flat_map(|(_, line)| {
+                        line.iter()
+                            .cloned()
+                            .zip(iter::repeat(MutWordMetadata::default()))
+                    })
+                    .collect::<BTreeMap<String, MutWordMetadata>>()
+                    .into_iter()
+                    .map(MutWordMap::from)
+            ).collect::<Box<[_]>>();
 
         for (sub, line) in lines.iter() {
             println!("{:?}", line);
             line.iter()
-                .map(|word| words.binary_search(word).unwrap())
+                .map(|word| binary_search(&*words, word).unwrap())
                 .collect::<Vec<_>>()
                 .into_iter()
                 .chain(iter::once(0))
@@ -216,7 +243,11 @@ impl SubData {
 
         SubData {
             list,
-            index: words,
+            index: SubIndex(
+                words.into_iter()
+                    .map(WordMap::from)
+                    .collect()
+            ),
         }
     }
 }

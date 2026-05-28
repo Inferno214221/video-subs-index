@@ -8,7 +8,7 @@ use macron_path::path;
 use rocket::{Request, State, fs::NamedFile, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::status::{BadRequest, Created}, serde::json::Json};
 use srt_subtitles_parser::Subtitle;
 
-use crate::{CONTENT_ROOT, video::{MediaIndex, SubList, slice_video}};
+use crate::{CONTENT_ROOT, video::{MediaIndex, MutSubList, SubList, slice_video}};
 
 // TODO: Catchers for 404, 406, 400, 500
 
@@ -107,7 +107,7 @@ pub fn search_episode(
     episode: Id,
     q: &str,
     index: &State<MediaIndex>
-) -> Option<Json<SubList>> {
+) -> Option<Json<MutSubList>> {
     Some(Json(
         index.get(*media)?
             .get(*episode)?
@@ -121,7 +121,7 @@ pub fn search_media<'s>(
     media: Id,
     q: &str,
     index: &'s State<MediaIndex>
-) -> Option<Json<BTreeMap<&'s str, SubList>>> {
+) -> Option<Json<BTreeMap<&'s str, MutSubList>>> {
     Some(Json(
         index.get(*media)?
             .iter()

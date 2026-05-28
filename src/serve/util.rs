@@ -3,7 +3,7 @@ use std::{convert::Infallible, path::Path};
 use ct_regex::{Regex, regex};
 use derive_more::{AsRef, Deref, Display, Error, From};
 use hypertext::{Renderable, Rendered};
-use rocket::{Request, fs::relative, http::Status, request::{FromParam, FromRequest, Outcome}, response::content::RawHtml, tokio::fs::File};
+use rocket::{fs::relative, Request, http::Status, request::{FromParam, FromRequest, Outcome}, response::content::RawHtml, tokio::fs::File};
 
 pub const CONTENT_ROOT: &str = relative!("content");
 

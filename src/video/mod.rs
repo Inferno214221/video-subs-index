@@ -6,7 +6,7 @@ use ffmpeg_light::{Time, TranscodeBuilder};
 use macron_path::path;
 use srt_subtitles_parser::{self as srt, Subtitle, Timestamp};
 
-use crate::CONTENT_ROOT;
+use crate::serve::util::CONTENT_ROOT;
 
 pub fn normalize_sub(text: &str) -> String {
     let mut text = text.to_lowercase();

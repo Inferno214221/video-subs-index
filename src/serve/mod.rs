@@ -6,9 +6,8 @@ use ct_regex::{Regex, regex};
 use derive_more::{AsRef, Deref, Display};
 use macron_path::path;
 use rocket::{Request, State, fs::NamedFile, http::{Status, uri::Origin}, request::{FromParam, FromRequest, Outcome}, response::status::{BadRequest, Created}, serde::json::Json};
-use srt_subtitles_parser::Subtitle;
 
-use crate::{CONTENT_ROOT, video::{MediaIndex, MutSubList, SubList, slice_video}};
+use crate::{CONTENT_ROOT, video::{MediaIndex, Sub, slice_video}};
 
 // TODO: Catchers for 404, 406, 400, 500
 
@@ -81,7 +80,7 @@ pub fn create_content<'s>(
     artifact: usize,
     index: &'s State<MediaIndex>,
     origin: &Origin,
-) -> Option<Created<Json<&'s Subtitle>>> {
+) -> Option<Created<Json<&'s Sub>>> {
     let target = path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif");
 
     let sub = index.get(*media)?
@@ -107,7 +106,7 @@ pub fn search_episode(
     episode: Id,
     q: &str,
     index: &State<MediaIndex>
-) -> Option<Json<MutSubList>> {
+) -> Option<Json<Vec<Sub>>> {
     Some(Json(
         index.get(*media)?
             .get(*episode)?
@@ -121,7 +120,7 @@ pub fn search_media<'s>(
     media: Id,
     q: &str,
     index: &'s State<MediaIndex>
-) -> Option<Json<BTreeMap<&'s str, MutSubList>>> {
+) -> Option<Json<BTreeMap<&'s str, Vec<Sub>>>> {
     Some(Json(
         index.get(*media)?
             .iter()
@@ -149,7 +148,7 @@ pub fn list_subtitles<'s>(
     media: Id,
     episode: Id,
     index: &'s State<MediaIndex>
-) -> Option<Json<&'s SubList>> {
+) -> Option<Json<&'s [Sub]>> {
     Some(Json(
         &index.get(*media)?
             .get(*episode)?

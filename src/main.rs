@@ -1,3 +1,4 @@
+use rocket::fs::{FileServer, relative};
 use video_subs_index::{serve::*, video::MediaIndex};
 
 #[macro_use] extern crate rocket;
@@ -19,9 +20,8 @@ fn rocket() -> _ {
                 search_page,
                 list_subtitles,
                 list_episodes,
-                list_media,
-                global_css,
-                search_js
+                list_media
             ]
         )
+        .mount("/static", FileServer::from(relative!("res")))
 }

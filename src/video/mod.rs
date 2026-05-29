@@ -223,7 +223,7 @@ impl SubData {
             ).collect::<Box<[_]>>();
 
         for (sub, line) in lines.iter() {
-            println!("{:?}", line);
+            // println!("{:?}", line);
             line.iter()
                 .map(|word| words.binary_search_by_key(&word, |map| &map.word).unwrap())
                 .collect::<Vec<_>>()

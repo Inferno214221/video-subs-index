@@ -31,7 +31,7 @@ pub fn search_episode(
         },
         ty if ty == &MediaType::HTML => {
             HtmlOrJson::Html(Html::render(
-                SearchPageWithResults {
+                SearchPage {
                     form: SearchPageForm {
                         index,
                         media: Some(&media),
@@ -61,9 +61,10 @@ pub fn search_page_episode(
         SearchPage {
             form: SearchPageForm {
                 index,
-                media: Some(*media),
-                episode: Some(*episode),
-            }
+                media: Some(&media),
+                episode: Some(&episode),
+            },
+            results: ()
         }
     )
 }
@@ -89,7 +90,7 @@ pub fn search_media<'s>(
         },
         ty if ty == &MediaType::HTML => {
             HtmlOrJson::Html(Html::render(
-                SearchPageWithResults {
+                SearchPage {
                     form: SearchPageForm {
                         index,
                         media: Some(&media),
@@ -117,9 +118,10 @@ pub fn search_page_media(
         SearchPage {
             form: SearchPageForm {
                 index,
-                media: Some(*media),
+                media: Some(&media),
                 episode: None,
-            }
+            },
+            results: ()
         }
     )
 }
@@ -138,12 +140,13 @@ pub fn search_page(index: &State<MediaIndex>, _html: &ImplicitHtml) -> Html {
                 index,
                 media: None,
                 episode: None,
-            }
+            },
+            results: ()
         }
     )
 }
 
-struct PageWrapper<R: Renderable, S: AsRef<str>> {
+pub struct PageWrapper<R: Renderable, S: AsRef<str>> {
     title: S,
     children: R,
 }
@@ -172,7 +175,7 @@ impl<R: Renderable, S: AsRef<str>> Renderable for PageWrapper<R, S> {
     }
 }
 
-struct SelectedOption<'v, R: Renderable> {
+pub struct SelectedOption<'v, R: Renderable> {
     value: &'v str,
     selected: bool,
     children: R,
@@ -191,7 +194,7 @@ impl<'v, R: Renderable> Renderable for SelectedOption<'v, R> {
     }
 }
 
-struct SearchPageForm<'i> {
+pub struct SearchPageForm<'i> {
     index: &'i MediaIndex,
     media: Option<&'i str>,
     episode: Option<&'i str>,
@@ -227,9 +230,10 @@ impl<'i> Renderable for SearchPageForm<'i> {
                     {
                         @if let Some(selected_episode) = self.episode {
                             @for episode in episodes.keys() {
-                                SelectedOption value=episode selected=(episode == selected_episode) {
-                                    (episode)
-                                }
+                                SelectedOption
+                                    value=episode
+                                    selected=(episode == selected_episode)
+                                    { (episode) }
                             }
                         } @else {
                             @for episode in episodes.keys() {
@@ -250,43 +254,18 @@ impl<'i> Renderable for SearchPageForm<'i> {
     }
 }
 
-struct SearchPage<'i> {
-    form: SearchPageForm<'i>,
-}
-
-impl<'i> Renderable for SearchPage<'i> {
-    fn render_to(&self, buffer: &mut Buffer<Node>) {
-        maud! {
-            PageWrapper title="Search" {
-                h2 {
-                    "Search Quotes"
-                }
-
-                (self.form)
-            }
-        }
-        .render_to(buffer);
-    }
-}
-
-struct SearchPageWithResults<'i, R: Renderable> {
+pub struct SearchPage<'i, R: Renderable> {
     form: SearchPageForm<'i>,
     results: R,
 }
 
-impl<'i, R: Renderable> Renderable for SearchPageWithResults<'i, R> {
+impl<'i, R: Renderable> Renderable for SearchPage<'i, R> {
     fn render_to(&self, buffer: &mut Buffer<Node>) {
         maud! {
             PageWrapper title="Search" {
-                h2 {
-                    "Search Results"
-                }
-
+                h2 { "Search Results" }
                 (self.form)
-
                 (self.results)
-
-                script src="/static/search.js" {}
             }
         }
         .render_to(buffer);
@@ -304,10 +283,14 @@ impl<'s> Renderable for SubDisplay<'s> {
         maud! {
             ul {
                 @for subtitle in self.subs {
+                    @let link = format!(
+                        "/content/{}/{}/{}",
+                        self.media,
+                        self.episode,
+                        subtitle.index
+                    );
                     li {
-                        a href=(format!("/content/{}/{}/{}", self.media, self.episode, subtitle.index)) {
-                            (subtitle.index)
-                        }
+                        a href=link { (subtitle.index) }
                         ": "
                         (subtitle.text)
                     }
@@ -331,7 +314,7 @@ impl<'s> Renderable for SubDisplayWithEpisode<'s> {
                     li { (episode) }
                     SubDisplay
                         media=(self.media)
-                        episode=(episode)
+                        episode=episode
                         subs=(self.subs.get(episode).unwrap());
                 }
             }

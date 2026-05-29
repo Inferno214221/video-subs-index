@@ -11,17 +11,13 @@ function onSubmit() {
     }
 }
 
-async function onChangeMedia() {
-    const episodeSelect = document.getElementById("search-episode");
-    episodeSelect.innerHTML = `\<option value="" selected\>(any)\</option\>`;
+function onChangeMedia() {
     const media = document.getElementById("search-media").value;
-    if (media) {
-        const episodes = await (await fetch(`/list/${media}`)).json();
-        console.log(episodeSelect, episodes);
-        for (const episode of episodes) {
-            episodeSelect.innerHTML += `\n<option value="${episode}">${episode}</option>`;
-        }   
-    }
+    document.location = `/search/${media}`;
 }
 
-window.onload = onChangeMedia();
+function onChangeEpisode() {
+    const media = document.getElementById("search-media").value;
+    const episode = document.getElementById("search-episode").value;
+    document.location = `/search/${media}/${episode}`;
+}

@@ -14,6 +14,8 @@ fn rocket() -> _ {
                 search_episode,
                 search_media,
                 search_all,
+                search_page_episode,
+                search_page_media,
                 search_page,
                 list_subtitles,
                 list_episodes,

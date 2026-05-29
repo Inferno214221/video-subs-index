@@ -22,6 +22,21 @@ pub fn search_episode(
     ))
 }
 
+#[get("/search/<media>/<episode>")]
+pub fn search_page_episode(
+    media: Id,
+    episode: Id,
+    index: &State<MediaIndex>
+) -> Html {
+    Html::render(
+        SearchPage {
+            index,
+            media: Some(*media),
+            episode: Some(*episode),
+        }
+    )
+}
+
 #[get("/search/<media>?<query>")]
 pub fn search_media<'s>(
     media: Id,
@@ -39,6 +54,20 @@ pub fn search_media<'s>(
     ))
 }
 
+#[get("/search/<media>")]
+pub fn search_page_media(
+    media: Id,
+    index: &State<MediaIndex>
+) -> Html {
+    Html::render(
+        SearchPage {
+            index,
+            media: Some(*media),
+            episode: None,
+        }
+    )
+}
+
 #[get("/search?<query>")]
 pub fn search_all(query: &str) -> BadRequest<&'static str> {
     let _ = query;
@@ -48,34 +77,10 @@ pub fn search_all(query: &str) -> BadRequest<&'static str> {
 #[get("/search")]
 pub fn search_page(index: &State<MediaIndex>, _html: &ImplicitHtml) -> Html {
     Html::render(
-        maud! {
-            PageWrapper title="Search" {
-                h2 {
-                    "Search Quotes"
-                }
-
-                form #search-form action="/search" onsubmit="return onSubmit();" {
-                    label for="search-media" { "Media: " }
-                    select #search-media onchange="onChangeMedia()" {
-                        option value="" selected { "(none)" }
-                        @for media in index.keys() {
-                            option value=(media) { (media) }
-                        }
-                    }
-                    br;
-                    label for="search-episode" { "Episode: " }
-                    select #search-episode {
-                        option value="" selected { "(any)" }
-                    }
-                    br;
-                    input #search-bar type="search" placeholder="Quote" name="query";
-                    input #search-button type="submit" value="Search";
-                }
-
-                script {
-                    (Raw::dangerously_create(include_str!("./search.js")))
-                }
-            }
+        SearchPage {
+            index,
+            media: None,
+            episode: None,
         }
     )
 }
@@ -102,6 +107,75 @@ impl<R: Renderable, S: AsRef<str>> Renderable for PageWrapper<R, S> {
 
                 main {
                     (self.children)
+                }
+            }
+        }
+        .render_to(buffer);
+    }
+}
+
+struct SearchPage<'i> {
+    index: &'i MediaIndex,
+    media: Option<&'i str>,
+    episode: Option<&'i str>,
+}
+
+impl<'i> Renderable for SearchPage<'i> {
+    fn render_to(&self, buffer: &mut Buffer<Node>) {
+        maud! {
+            PageWrapper title="Search" {
+                h2 {
+                    "Search Quotes"
+                }
+
+                form #search-form action="/search" onsubmit="return onSubmit();" {
+                    label for="search-media" { "Media: " }
+                    select #search-media onchange="onChangeMedia()" {
+                        @if let Some(selected_media) = self.media {
+                            option value="" { "(none)" }
+                            @for media in self.index.keys() {
+                                @if media == selected_media {
+                                    option value=(media) selected { (media) }
+                                } @else {
+                                    option value=(media) { (media) }
+                                }
+                            }
+                        } @else {
+                            option value="" selected { "(none)" }
+                            @for media in self.index.keys() {
+                                option value=(media) { (media) }
+                            }
+                        }
+                    }
+                    br;
+                    label for="search-episode" { "Episode: " }
+                    select #search-episode onchange="onChangeEpisode()" {
+                        option value="" selected { "(any)" }
+                        @if let Some(selected_media) = self.media &&
+                            let Some(episodes) = self.index.get(selected_media)
+                        {
+                            @if let Some(selected_episode) = self.episode {
+                                @for media in episodes.keys() {
+                                    @if media == selected_episode {
+                                        option value=(media) selected { (media) }
+                                    } @else {
+                                        option value=(media) { (media) }
+                                    }
+                                }
+                            } @else {
+                                @for media in episodes.keys() {
+                                    option value=(media) { (media) }
+                                }
+                            }
+                        }
+                    }
+                    br;
+                    input #search-bar type="search" placeholder="Quote" name="query";
+                    input #search-button type="submit" value="Search";
+                }
+
+                script {
+                    (Raw::dangerously_create(include_str!("./search.js")))
                 }
             }
         }

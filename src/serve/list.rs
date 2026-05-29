@@ -1,6 +1,6 @@
 use rocket::{State, serde::json::Json};
 
-use crate::{serve::util::Id, video::{MediaIndex, Sub}};
+use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::util::Id};
 
 #[get("/list/<media>/<episode>")]
 pub fn list_subtitles<'s>(

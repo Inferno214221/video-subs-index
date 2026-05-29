@@ -4,4 +4,4 @@
 #[macro_use] extern crate rocket;
 
 pub mod serve;
-pub mod video;
+pub mod generate;

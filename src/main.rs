@@ -1,5 +1,5 @@
 use rocket::fs::{FileServer, relative};
-use video_subs_index::{serve::*, video::MediaIndex};
+use video_subs_index::{serve::*, generate::index::MediaIndex};
 
 #[macro_use] extern crate rocket;
 

@@ -5,7 +5,7 @@ use derive_more::{Deref, Display, Error, From};
 use macron_path::path;
 use rocket::{State, http::uri::Origin, request::FromParam , response::status::Created, serde::json::Json};
 
-use crate::{serve::util::{CONTENT_ROOT, Gif, Id, ImplicitGif}, video::{MediaIndex, Sub, slice_video}};
+use crate::{generate::{index::MediaIndex, subtitle::Sub, video::slice_video}, serve::util::{CONTENT_ROOT, Gif, Id, ImplicitGif}};
 
 regex!{
     pub ArtifactPattern = r"(?<num>\d+)(.gif)?"

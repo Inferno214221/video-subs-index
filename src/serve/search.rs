@@ -3,9 +3,7 @@ use std::collections::BTreeMap ;
 use hypertext::{Buffer, context::Node, prelude::*};
 use rocket::{State, http::{Accept, MediaType, Status}, response::status::BadRequest, serde::json::Json};
 
-use crate::{serve::util::{Html, Id, ImplicitHtml}, video::{MediaIndex, Sub}};
-
-// TODO: content-types html, json, gif
+use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::util::{Html, Id, ImplicitHtml}};
 
 #[derive(Debug, Responder)]
 pub enum HtmlOrJson<T> {

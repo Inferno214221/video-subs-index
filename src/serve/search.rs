@@ -1,11 +1,36 @@
 use std::collections::BTreeMap ;
 
+use derive_more::From;
 use hypertext::{Buffer, context::Node, prelude::*};
 use rocket::{State, http::{Accept, MediaType, Status}, response::status::BadRequest, serde::json::Json};
 
 use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::util::{Html, Id, ImplicitHtml}};
 
-#[derive(Debug, Responder)]
+pub trait IntoHtmlOrJson: Sized {
+    type JsonInner: Sized;
+
+    fn html(self) -> Html;
+
+    fn json_inner(self) -> Self::JsonInner;
+
+    fn json(self) -> Json<Self::JsonInner> {
+        Json(self.json_inner())
+    }
+
+    fn into_html_or_json(self, accept: Option<&Accept>) -> HtmlOrJson<Self::JsonInner> {
+        for media_type in accept.unwrap_or(&Accept::JSON).media_types() {
+            match media_type {
+                ty if ty == &MediaType::JSON
+                    || ty == &MediaType::Any => return self.json().into(),
+                ty if ty == &MediaType::HTML => return self.html().into(),
+                _ => (),
+            }
+        }
+        HtmlOrJson::Neither(Status::NotAcceptable)
+    }
+}
+
+#[derive(Debug, Responder, From)]
 pub enum HtmlOrJson<T> {
     Html(Html),
     Json(Json<T>),
@@ -25,30 +50,46 @@ pub fn search_episode(
         .index
         .search_with_query(query);
 
-    Some(match accept.unwrap_or(&Accept::JSON).preferred().media_type() {
-        ty if ty == &MediaType::JSON || ty == &MediaType::Any => {
-            HtmlOrJson::Json(Json(results))
-        },
-        ty if ty == &MediaType::HTML => {
-            HtmlOrJson::Html(Html::render(
-                SearchPage {
-                    form: SearchPageForm {
-                        index,
-                        media: Some(&media),
-                        episode: Some(&episode),
-                    },
-                    results: SubDisplay {
-                        media: &media,
-                        episode: &episode,
-                        subs: &results,
-                    },
-                }
-            ))
-        },
-        _ => {
-            HtmlOrJson::Neither(Status::NotAcceptable)
-        },
-    })
+    Some(
+        SearchEpisode {
+            index,
+            media: &media,
+            episode: &episode,
+            results,
+        }.into_html_or_json(accept)
+    )
+}
+
+pub struct SearchEpisode<'r> {
+    index: &'r MediaIndex,
+    media: &'r str,
+    episode: &'r str,
+    results: Vec<Sub>,
+}
+
+impl<'r> IntoHtmlOrJson for SearchEpisode<'r> {
+    type JsonInner = Vec<Sub>;
+
+    fn html(self) -> Html {
+        Html::render(
+            SearchPage {
+                form: SearchPageForm {
+                    index: self.index,
+                    media: Some(self.media),
+                    episode: Some(self.episode),
+                },
+                results: SubDisplay {
+                    media: self.media,
+                    episode: self.episode,
+                    subs: &self.results,
+                },
+            }
+        )
+    }
+
+    fn json_inner(self) -> Self::JsonInner {
+        self.results
+    }
 }
 
 #[get("/search/<media>/<episode>")]
@@ -70,12 +111,12 @@ pub fn search_page_episode(
 }
 
 #[get("/search/<media>?<query>")]
-pub fn search_media<'s>(
-    media: Id,
-    query: &str,
-    index: &'s State<MediaIndex>,
-    accept: Option<&Accept>,
-) -> Option<HtmlOrJson<BTreeMap<&'s str, Vec<Sub>>>> {
+pub fn search_media<'r>(
+    media: Id<'r>,
+    query: &'r str,
+    index: &'r State<MediaIndex>,
+    accept: Option<&'r Accept>,
+) -> Option<HtmlOrJson<BTreeMap<&'r str, Vec<Sub>>>> {
     let results = index.get(*media)?
         .iter()
         .map(|(episode, data)| (
@@ -84,29 +125,43 @@ pub fn search_media<'s>(
         ))
         .collect::<BTreeMap<_, _>>();
 
-    Some(match accept.unwrap_or(&Accept::JSON).preferred().media_type() {
-        ty if ty == &MediaType::JSON || ty == &MediaType::Any => {
-            HtmlOrJson::Json(Json(results))
-        },
-        ty if ty == &MediaType::HTML => {
-            HtmlOrJson::Html(Html::render(
-                SearchPage {
-                    form: SearchPageForm {
-                        index,
-                        media: Some(&media),
-                        episode: None,
-                    },
-                    results: SubDisplayWithEpisode {
-                        media: &media,
-                        subs: results
-                    },
-                }
-            ))
-        },
-        _ => {
-            HtmlOrJson::Neither(Status::NotAcceptable)
-        },
-    })
+    Some(
+        SearchMedia {
+            index,
+            media: &media,
+            results,
+        }.into_html_or_json(accept)
+    )
+}
+
+pub struct SearchMedia<'r> {
+    index: &'r MediaIndex,
+    media: &'r str,
+    results: BTreeMap<&'r str, Vec<Sub>>,
+}
+
+impl<'r> IntoHtmlOrJson for SearchMedia<'r> {
+    type JsonInner = BTreeMap<&'r str, Vec<Sub>>;
+
+    fn html(self) -> Html {
+        Html::render(
+            SearchPage {
+                form: SearchPageForm {
+                    index: self.index,
+                    media: Some(self.media),
+                    episode: None,
+                },
+                results: SubDisplayWithEpisode {
+                    media: self.media,
+                    subs: self.results
+                },
+            }
+        )
+    }
+
+    fn json_inner(self) -> Self::JsonInner {
+        self.results
+    }
 }
 
 #[get("/search/<media>")]

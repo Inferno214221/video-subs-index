@@ -1,12 +1,15 @@
 use std::{collections::BTreeMap, fs::{self, File}, sync::Arc, };
 
-use derive_more::{Deref, DerefMut};
 use macron_path::path;
 
 use crate::{generate::subtitle::{EpisodeMetadata, MediaMetadata, SubData}, serve::util::CONTENT_ROOT};
 
-#[derive(Debug, Clone, Default, Deref, DerefMut)]
-pub struct MediaIndex(pub BTreeMap<String, BTreeMap<String, SubData>>);
+#[derive(Debug, Clone, Default)]
+pub struct MediaIndex {
+    pub sub_data: BTreeMap<String, BTreeMap<String, SubData>>,
+    pub episode_data: BTreeMap<String, Arc<EpisodeMetadata>>,
+    pub media_data: BTreeMap<String, Arc<MediaMetadata>>,
+}
 
 impl MediaIndex {
     pub fn build_from_fs() -> MediaIndex {
@@ -15,7 +18,7 @@ impl MediaIndex {
             .try_collect()
             .expect("unable to read contents of content root");
 
-        let mut media_index = MediaIndex(BTreeMap::new());
+        let mut media_index = MediaIndex::default();
 
         for media in media_entries {
             let Ok(media_name) = media.file_name().into_string() else {
@@ -56,18 +59,20 @@ impl MediaIndex {
                     fs::exists(episode_path.with_extension("mkv")),
                     fs::exists(episode_path.with_extension("srt"))
                 ) {
-                    let episode_meta = EpisodeMetadata {
+                    let episode_meta = Arc::new(EpisodeMetadata {
                         inner: serde_saphyr::from_reader(
                             File::open(episode_path.with_extension("yaml"))
                                 .expect("unable to open episode metadata")
                         ).expect("unable to parse episode metadata"),
                         media: media_metadata.clone(),
-                    };
+                    });
 
                     let sub_index = SubData::parse_file(
                         path!("{CONTENT_ROOT}/{media_name}/{episode}.srt"),
-                        Arc::new(episode_meta)
+                        episode_meta.clone()
                     );
+
+                    media_index.episode_data.insert(episode.clone(), episode_meta);
 
                     (episode, sub_index)
                 } else {
@@ -75,7 +80,8 @@ impl MediaIndex {
                 }
             }).collect();
 
-            media_index.insert(media_name.clone(), episode_index);
+            media_index.sub_data.insert(media_name.clone(), episode_index);
+            media_index.media_data.insert(media_name, media_metadata);
         }
 
         media_index

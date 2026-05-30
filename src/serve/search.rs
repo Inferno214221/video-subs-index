@@ -45,7 +45,7 @@ pub fn search_episode(
     index: &State<MediaIndex>,
     accept: Option<&Accept>,
 ) -> Option<HtmlOrJson<Vec<Sub>>> {
-    let results = index.get(*media)?
+    let results = index.sub_data.get(*media)?
         .get(*episode)?
         .index
         .search_with_query(query);
@@ -117,7 +117,7 @@ pub fn search_media<'r>(
     index: &'r State<MediaIndex>,
     accept: Option<&'r Accept>,
 ) -> Option<HtmlOrJson<BTreeMap<&'r str, Vec<Sub>>>> {
-    let results = index.get(*media)?
+    let results = index.sub_data.get(*media)?
         .iter()
         .map(|(episode, data)| (
             episode.as_str(),
@@ -263,14 +263,14 @@ impl<'i> Renderable for SearchPageForm<'i> {
                 select #search-media onchange="onChangeMedia()" {
                     @if let Some(selected_media) = self.media {
                         option value="" { "(none)" }
-                        @for media in self.index.keys() {
+                        @for media in self.index.sub_data.keys() {
                             SelectedOption value=media selected=(media == selected_media) {
                                 (media)
                             }
                         }
                     } @else {
                         option value="" selected { "(none)" }
-                        @for media in self.index.keys() {
+                        @for media in self.index.sub_data.keys() {
                             option value=media { (media) }
                         }
                     }
@@ -281,7 +281,7 @@ impl<'i> Renderable for SearchPageForm<'i> {
                 select #search-episode onchange="onChangeEpisode()" {
                     option value="" { "(any)" }
                     @if let Some(selected_media) = self.media &&
-                        let Some(episodes) = self.index.get(selected_media)
+                        let Some(episodes) = self.index.sub_data.get(selected_media)
                     {
                         @if let Some(selected_episode) = self.episode {
                             @for episode in episodes.keys() {

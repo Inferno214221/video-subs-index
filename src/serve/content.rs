@@ -51,7 +51,7 @@ pub fn create_content<'s>(
     index: &'s State<MediaIndex>,
     origin: &Origin,
 ) -> Option<CreatedSub<'s>> {
-    let sub = index.get(*media)?
+    let sub = index.sub_data.get(*media)?
         .get(*episode)?
         .list
         .get(*artifact - 1)?;

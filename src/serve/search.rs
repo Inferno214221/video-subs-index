@@ -346,8 +346,8 @@ impl<'s> Renderable for SubDisplay<'s> {
                     );
                     li {
                         a href=link { (subtitle.index) }
-                        ": "
-                        (subtitle.text)
+                        br;
+                        pre { (serde_saphyr::to_string(subtitle).unwrap()) }
                     }
                 }
             }

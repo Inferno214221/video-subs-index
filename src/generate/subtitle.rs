@@ -1,7 +1,8 @@
-use std::{collections::BTreeMap, fs, iter, path::Path, sync::Arc};
+use std::{collections::BTreeMap, fs, iter, path::{Path, PathBuf}, sync::Arc};
 
 use ct_regex::{AnonRegex, regex};
 use derive_more::{Deref, DerefMut};
+use serde::{Deserialize, Serialize};
 use srt_subtitles_parser::{self as srt, Subtitle};
 
 pub fn normalize_sub(text: &str) -> String {
@@ -18,25 +19,53 @@ pub fn collect_words(text: &str) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-pub type Sub = Arc<Subtitle>;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MediaMetadata {
+    pub name: String,
+    pub title: String,
+    pub icon: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EpisodeMetadataInner {
+    pub name: String,
+    pub title: String,
+    pub season: u16,
+    pub number: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EpisodeMetadata {
+    pub inner: EpisodeMetadataInner,
+    pub media: Arc<MediaMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deref)]
+pub struct SubMetadata {
+    #[deref]
+    pub subtitle: Subtitle,
+    pub episode: Arc<EpisodeMetadata>,
+}
+
+pub type Sub = Arc<SubMetadata>;
 
 #[derive(Debug, Default, Clone, Deref, DerefMut)]
-pub struct WordMetadataBuilder(pub BTreeMap<usize, Vec<Sub>>);
+pub struct WordSeqBuilder(pub BTreeMap<usize, Vec<Sub>>);
 
 #[derive(Debug, Default, Clone, Deref, DerefMut)]
-pub struct WordMetadata(pub BTreeMap<usize, Box<[Sub]>>);
+pub struct WordSeq(pub BTreeMap<usize, Box<[Sub]>>);
 
-impl WordMetadata {
-    pub fn values_flattened(&self) -> Vec<&Arc<Subtitle>> {
+impl WordSeq {
+    pub fn values_flattened(&self) -> Vec<&Sub> {
         self.values()
             .flatten()
             .collect()
     }
 }
 
-impl From<WordMetadataBuilder> for WordMetadata {
-    fn from(value: WordMetadataBuilder) -> Self {
-        WordMetadata(
+impl From<WordSeqBuilder> for WordSeq {
+    fn from(value: WordSeqBuilder) -> Self {
+        WordSeq(
             value.0.into_iter()
                 .map(|(index, list)| (index, list.into()))
                 .collect()
@@ -47,17 +76,17 @@ impl From<WordMetadataBuilder> for WordMetadata {
 #[derive(Debug, Clone, Default)]
 pub struct WordMapBuilder {
     pub word: String,
-    pub metadata: WordMetadataBuilder,
+    pub metadata: WordSeqBuilder,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct WordMap {
     pub word: String,
-    pub metadata: WordMetadata,
+    pub metadata: WordSeq,
 }
 
-impl From<(String, WordMetadataBuilder)> for WordMapBuilder {
-    fn from((word, metadata): (String, WordMetadataBuilder)) -> Self {
+impl From<(String, WordSeqBuilder)> for WordMapBuilder {
+    fn from((word, metadata): (String, WordSeqBuilder)) -> Self {
         WordMapBuilder { word, metadata }
     }
 }
@@ -128,11 +157,14 @@ pub struct SubData {
 }
 
 impl SubData {
-    pub fn from_file(sub_path: impl AsRef<Path>) -> SubData {
+    pub fn parse_file(sub_path: impl AsRef<Path>, episode: Arc<EpisodeMetadata>) -> SubData {
         let list = srt::parse_srt(&fs::read_to_string(sub_path).unwrap()).unwrap()
             .subtitles
             .into_iter()
-            .map(Arc::new)
+            .map(|sub| Arc::new(SubMetadata {
+                subtitle: sub,
+                episode: episode.clone()
+            }))
             .collect::<Box<[_]>>();
 
         let text = list.iter().map(|sub| (
@@ -151,9 +183,9 @@ impl SubData {
                     .flat_map(|(_, line)| {
                         line.iter()
                             .cloned()
-                            .zip(iter::repeat(WordMetadataBuilder::default()))
+                            .zip(iter::repeat(WordSeqBuilder::default()))
                     })
-                    .collect::<BTreeMap<String, WordMetadataBuilder>>()
+                    .collect::<BTreeMap<String, WordSeqBuilder>>()
                     .into_iter()
                     .map(WordMapBuilder::from)
             ).collect::<Box<[_]>>();
@@ -169,7 +201,7 @@ impl SubData {
                     words[a].metadata
                         .entry(b)
                         .or_default()
-                        .push((*sub).clone())
+                        .push(Arc::clone(sub))
                 })
                 .last();
         }

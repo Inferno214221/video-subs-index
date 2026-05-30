@@ -1,9 +1,9 @@
-use std::{collections::BTreeMap, fs, };
+use std::{collections::BTreeMap, fs::{self, File}, sync::Arc, };
 
 use derive_more::{Deref, DerefMut};
 use macron_path::path;
 
-use crate::{generate::subtitle::SubData, serve::util::CONTENT_ROOT};
+use crate::{generate::subtitle::{EpisodeMetadata, MediaMetadata, SubData}, serve::util::CONTENT_ROOT};
 
 #[derive(Debug, Clone, Default, Deref, DerefMut)]
 pub struct MediaIndex(pub BTreeMap<String, BTreeMap<String, SubData>>);
@@ -22,10 +22,17 @@ impl MediaIndex {
                 panic!("invalid media name")
             };
             if !media.file_type().unwrap().is_dir() {
-                panic!("content root contains non-dir")
+                continue;
             }
 
             let media_path = path!("{CONTENT_ROOT}/{media_name}");
+
+            let media_metadata: Arc<MediaMetadata> = Arc::new(
+                serde_saphyr::from_reader(
+                    File::open(media_path.with_extension("yaml"))
+                        .expect("unable to open media metadata")
+                ).expect("unable to parse media metadata")
+            );
 
             let episode_entries: Vec<_> = fs::read_dir(&media_path)
                 .expect("unable to read media dir")
@@ -49,9 +56,19 @@ impl MediaIndex {
                     fs::exists(episode_path.with_extension("mkv")),
                     fs::exists(episode_path.with_extension("srt"))
                 ) {
-                    let sub_index = SubData::from_file(
-                        path!("{CONTENT_ROOT}/{media_name}/{episode}.srt")
+                    let episode_meta = EpisodeMetadata {
+                        inner: serde_saphyr::from_reader(
+                            File::open(episode_path.with_extension("yaml"))
+                                .expect("unable to open episode metadata")
+                        ).expect("unable to parse episode metadata"),
+                        media: media_metadata.clone(),
+                    };
+
+                    let sub_index = SubData::parse_file(
+                        path!("{CONTENT_ROOT}/{media_name}/{episode}.srt"),
+                        Arc::new(episode_meta)
                     );
+
                     (episode, sub_index)
                 } else {
                     panic!("missing required files for episode")

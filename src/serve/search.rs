@@ -351,12 +351,11 @@ impl<'s> Renderable for SubDisplay<'s> {
                         subtitle.index
                     );
                     div .sub-display {
-                        h4 { "\"" (subtitle.text) "\"" }
+                        a href=link { img src=link alt=(format!("\"{}\"", subtitle.text)); }
+                        br;
                         div {
-                            // a href=link { (self.media) "/" (self.episode) "/" (subtitle.index) }
                             " (" %(DispTime(&subtitle.start)) " - " %(DispTime(&subtitle.end)) ")"
                         }
-                        a href=link { img src=link onerror="this.onerror=null; this.remove();"; }
                     }
                 }
             }

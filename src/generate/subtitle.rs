@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs, iter, path::{Path, PathBuf}, sync::Arc};
 
 use ct_regex::{AnonRegex, regex};
-use derive_more::{Deref, DerefMut};
+use derive_more::{Deref, DerefMut, Display};
 use serde::{Deserialize, Serialize};
 use srt_subtitles_parser::{self as srt, Subtitle};
 
@@ -19,7 +19,8 @@ pub fn collect_words(text: &str) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display)]
+#[display("{title}")]
 pub struct MediaMetadata {
     pub name: String,
     pub title: String,
@@ -34,7 +35,8 @@ pub struct EpisodeMetadataInner {
     pub number: u16,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deref)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deref, Display)]
+#[display("S{}E{}: {}", inner.season, inner.number, inner.title)]
 pub struct EpisodeMetadata {
     #[deref]
     pub inner: EpisodeMetadataInner,

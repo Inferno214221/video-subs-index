@@ -39,7 +39,7 @@ select {
   border-color: black;
   color: inherit;
   font-family: inherit;
-  font-size: 11pt;
+  font-size: medium;
   outline: none;
   box-shadow: 0px 1px #00000088;
   padding: 5px 10px;
@@ -53,16 +53,51 @@ h1 {
   margin: 0;
 }
 
+main {
+  max-width: min(calc(100% - 30px), 1000px);
+  margin: 0 auto 100px;
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--inf-blue1);
+}
+
 #search-bar {
-  width: 180px;
+  flex-grow: 3;
 }
 
 #search-button {
   width: min-content;
 }
 
-main {
-  max-width: min(calc(100% - 30px), 1000px);
-  margin: 0 auto;
-  overflow-x: hidden;
+#search-form {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+#search-form > select {
+  flex-grow: 1;
+}
+
+.sub-list {
+  display: grid;
+  grid-gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+}
+
+.sub-display {
+  background-color: var(--inf-grey2);
+  border-radius: 5px;
+  padding: 10px;
+}
+
+.sub-display > h4 {
+  margin: 0;
+}
+
+.sub-display > img {
+  max-width: 100%;
 }

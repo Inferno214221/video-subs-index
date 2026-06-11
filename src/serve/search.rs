@@ -82,6 +82,7 @@ impl<'r> IntoHtmlOrJson for SearchEpisode<'r> {
                     media: self.media,
                     episode: self.episode,
                     subs: &self.results,
+                    index: self.index,
                 },
             }
         )
@@ -153,7 +154,8 @@ impl<'r> IntoHtmlOrJson for SearchMedia<'r> {
                 },
                 results: SubDisplayWithEpisode {
                     media: self.media,
-                    subs: self.results
+                    subs: self.results,
+                    index: self.index,
                 },
             }
         )
@@ -211,14 +213,14 @@ impl<R: Renderable, S: AsRef<str>> Renderable for PageWrapper<R, S> {
         maud! {
             head {
                 title {
-                    "Quotes - " (self.title.as_ref())
+                    "Subtitle Index - " (self.title.as_ref())
                 }
                 link rel="stylesheet" href="/static/global.css";
             }
 
             body {
                 nav {
-                    h1 { "Quotes" }
+                    h1 { "Subtitle Index" }
                 }
 
                 main {
@@ -259,17 +261,16 @@ impl<'i> Renderable for SearchPageForm<'i> {
     fn render_to(&self, buffer: &mut Buffer<Node>) {
         maud! {
             form #search-form action="/search" onsubmit="return onSubmit();" {
-                label for="search-media" { "Media: " }
                 select #search-media onchange="onChangeMedia()" {
                     @if let Some(selected_media) = self.media {
-                        option value="" { "(none)" }
+                        option value="" { "(No Media Source)" }
                         @for media in self.index.sub_data.keys() {
                             SelectedOption value=media selected=(media == selected_media) {
                                 (&self.index.get_media(media).title)
                             }
                         }
                     } @else {
-                        option value="" selected { "(none)" }
+                        option value="" selected { "(No Media Source)" }
                         @for media in self.index.sub_data.keys() {
                             option value=media {
                                 (&self.index.get_media(media).title)
@@ -277,11 +278,9 @@ impl<'i> Renderable for SearchPageForm<'i> {
                         }
                     }
                 }
-                br;
 
-                label for="search-episode" { "Episode: " }
                 select #search-episode onchange="onChangeEpisode()" {
-                    option value="" { "(any)" }
+                    option value="" { "(Any Episode)" }
                     @if let Some(selected_media) = self.media &&
                         let Some(episodes) = self.index.sub_data.get(selected_media)
                     {
@@ -291,21 +290,20 @@ impl<'i> Renderable for SearchPageForm<'i> {
                                     value=episode
                                     selected=(episode == selected_episode)
                                 {
-                                    (&self.index.get_episode(episode).title)
+                                    %(self.index.get_episode(episode))
                                 }
                             }
                         } @else {
                             @for episode in episodes.keys() {
                                 option value=episode {
-                                    (&self.index.get_episode(episode).title)
+                                    %(self.index.get_episode(episode))
                                 }
                             }
                         }
                     }
                 }
-                br;
 
-                input #search-bar type="search" placeholder="Quote" name="query";
+                input #search-bar type="search" placeholder="Seach subtitle contents" name="query";
                 input #search-button type="submit" value="Search";
 
                 script src="/static/search.js" {}
@@ -324,7 +322,7 @@ impl<'i, R: Renderable> Renderable for SearchPage<'i, R> {
     fn render_to(&self, buffer: &mut Buffer<Node>) {
         maud! {
             PageWrapper title="Search" {
-                h2 { "Search Results" }
+                h2 { "Subtitle Search" }
                 (self.form)
                 (self.results)
             }
@@ -337,12 +335,13 @@ pub struct SubDisplay<'d> {
     pub media: &'d str,
     pub episode: &'d str,
     pub subs: &'d Vec<Sub>,
+    pub index: &'d MediaIndex,
 }
 
 impl<'s> Renderable for SubDisplay<'s> {
     fn render_to(&self, buffer: &mut Buffer<Node>) {
         maud! {
-            ul {
+            div .sub-list {
                 @for subtitle in self.subs {
                     @let link = format!(
                         "/content/{}/{}/{}",
@@ -350,10 +349,13 @@ impl<'s> Renderable for SubDisplay<'s> {
                         self.episode,
                         subtitle.index
                     );
-                    li {
-                        a href=link { (subtitle.index) }
-                        br;
-                        pre { (serde_saphyr::to_string(subtitle).unwrap()) }
+                    div .sub-display {
+                        h4 { "\"" (subtitle.text) "\"" }
+                        p {
+                            a href=link { (self.media) "/" (self.episode) "/" (subtitle.index) }
+                            " (" %(subtitle.start) " - " %(subtitle.end) ")"
+                        }
+                        img src=link onerror="this.onerror=null; this.remove();";
                     }
                 }
             }
@@ -365,18 +367,23 @@ impl<'s> Renderable for SubDisplay<'s> {
 pub struct SubDisplayWithEpisode<'d> {
     pub media: &'d str,
     pub subs: BTreeMap<&'d str, Vec<Sub>>,
+    pub index: &'d MediaIndex,
 }
 
 impl<'s> Renderable for SubDisplayWithEpisode<'s> {
     fn render_to(&self, buffer: &mut Buffer<Node>) {
         maud! {
-            ul {
+            div {
                 @for episode in self.subs.keys() {
-                    li { (episode) }
-                    SubDisplay
-                        media=(self.media)
-                        episode=episode
-                        subs=(self.subs.get(episode).unwrap());
+                    @if let Some(subs) = self.subs.get(episode) && !subs.is_empty() {
+                        h3 { %(self.index.get_episode(episode)) }
+                        SubDisplay
+                            media=(self.media)
+                            episode=episode
+                            subs=subs
+                            index=(self.index);
+                    }
+
                 }
             }
         }

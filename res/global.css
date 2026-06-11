@@ -94,10 +94,16 @@ a {
   padding: 10px;
 }
 
-.sub-display > h4 {
+.sub-display h4 {
   margin: 0;
 }
 
-.sub-display > img {
+.sub-display img {
   max-width: 100%;
+}
+
+.sub-display div {
+  text-align: end;
+  margin: 5px 0;
+  color: var(--inf-white1);
 }

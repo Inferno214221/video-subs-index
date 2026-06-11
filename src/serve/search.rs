@@ -1,8 +1,9 @@
 use std::collections::BTreeMap ;
 
-use derive_more::From;
+use derive_more::{Display, From};
 use hypertext::{Buffer, context::Node, prelude::*};
 use rocket::{State, http::{Accept, MediaType, Status}, response::status::BadRequest, serde::json::Json};
+use srt_subtitles_parser::Timestamp;
 
 use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::util::{Html, Id, ImplicitHtml}};
 
@@ -266,14 +267,14 @@ impl<'i> Renderable for SearchPageForm<'i> {
                         option value="" { "(No Media Source)" }
                         @for media in self.index.sub_data.keys() {
                             SelectedOption value=media selected=(media == selected_media) {
-                                (&self.index.get_media(media).title)
+                                %(self.index.get_media(media))
                             }
                         }
                     } @else {
                         option value="" selected { "(No Media Source)" }
                         @for media in self.index.sub_data.keys() {
                             option value=media {
-                                (&self.index.get_media(media).title)
+                                %(self.index.get_media(media))
                             }
                         }
                     }
@@ -351,11 +352,11 @@ impl<'s> Renderable for SubDisplay<'s> {
                     );
                     div .sub-display {
                         h4 { "\"" (subtitle.text) "\"" }
-                        p {
-                            a href=link { (self.media) "/" (self.episode) "/" (subtitle.index) }
-                            " (" %(subtitle.start) " - " %(subtitle.end) ")"
+                        div {
+                            // a href=link { (self.media) "/" (self.episode) "/" (subtitle.index) }
+                            " (" %(DispTime(&subtitle.start)) " - " %(DispTime(&subtitle.end)) ")"
                         }
-                        img src=link onerror="this.onerror=null; this.remove();";
+                        a href=link { img src=link onerror="this.onerror=null; this.remove();"; }
                     }
                 }
             }
@@ -390,3 +391,7 @@ impl<'s> Renderable for SubDisplayWithEpisode<'s> {
         .render_to(buffer);
     }
 }
+
+#[derive(Display)]
+#[display("{:02}:{:02}:{:02}", _0.hours, _0.minutes, _0.seconds)]
+pub struct DispTime<'a>(pub &'a Timestamp);

@@ -86,4 +86,12 @@ impl MediaIndex {
 
         media_index
     }
+
+    pub fn get_media(&self, key: &str) -> &MediaMetadata {
+        self.media_data.get(key).unwrap()
+    }
+
+    pub fn get_episode(&self, key: &str) -> &EpisodeMetadata {
+        self.episode_data.get(key).unwrap()
+    }
 }

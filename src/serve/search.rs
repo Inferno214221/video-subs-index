@@ -265,13 +265,15 @@ impl<'i> Renderable for SearchPageForm<'i> {
                         option value="" { "(none)" }
                         @for media in self.index.sub_data.keys() {
                             SelectedOption value=media selected=(media == selected_media) {
-                                (media)
+                                (&self.index.get_media(media).title)
                             }
                         }
                     } @else {
                         option value="" selected { "(none)" }
                         @for media in self.index.sub_data.keys() {
-                            option value=media { (media) }
+                            option value=media {
+                                (&self.index.get_media(media).title)
+                            }
                         }
                     }
                 }
@@ -288,11 +290,15 @@ impl<'i> Renderable for SearchPageForm<'i> {
                                 SelectedOption
                                     value=episode
                                     selected=(episode == selected_episode)
-                                    { (episode) }
+                                {
+                                    (&self.index.get_episode(episode).title)
+                                }
                             }
                         } @else {
                             @for episode in episodes.keys() {
-                                option value=episode { (episode) }
+                                option value=episode {
+                                    (&self.index.get_episode(episode).title)
+                                }
                             }
                         }
                     }

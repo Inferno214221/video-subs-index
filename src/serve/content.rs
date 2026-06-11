@@ -7,7 +7,7 @@ use rocket::{State, http::uri::Origin, request::FromParam , response::status::Cr
 
 use crate::{generate::{index::MediaIndex, subtitle::Sub, video::slice_video}, serve::util::{CONTENT_ROOT, Gif, Id, ImplicitGif}};
 
-regex!{
+regex! {
     pub ArtifactPattern = r"(?<num>\d+)(.gif)?"
 }
 

@@ -34,8 +34,9 @@ pub struct EpisodeMetadataInner {
     pub number: u16,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deref)]
 pub struct EpisodeMetadata {
+    #[deref]
     pub inner: EpisodeMetadataInner,
     pub media: Arc<MediaMetadata>,
 }

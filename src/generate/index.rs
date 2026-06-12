@@ -1,8 +1,6 @@
 use std::{collections::BTreeMap, fs::{self, File}, sync::Arc, };
 
-use macron_path::path;
-
-use crate::{generate::subtitle::{EpisodeMetadata, MediaMetadata, SubData}, serve::util::CONTENT_ROOT};
+use crate::{generate::subtitle::{EpisodeMetadata, MediaMetadata, SubData}, serve::files::{self, CONTENT_ROOT}};
 
 #[derive(Debug, Clone, Default)]
 pub struct MediaIndex {
@@ -28,11 +26,11 @@ impl MediaIndex {
                 continue;
             }
 
-            let media_path = path!("{CONTENT_ROOT}/{media_name}");
+            let media_path = files::media_dir(&media_name);
 
             let media_metadata: Arc<MediaMetadata> = Arc::new(
                 serde_saphyr::from_reader(
-                    File::open(media_path.with_extension("yaml"))
+                    File::open(files::metadata_from_media(&media_path))
                         .expect("unable to open media metadata")
                 ).expect("unable to parse media metadata")
             );
@@ -54,21 +52,21 @@ impl MediaIndex {
                 );
 
             let episode_index = episode_dirs.map(|episode| {
-                let episode_path = media_path.join(&episode);
+                let episode_path = files::episode_dir_from_media(&media_path, &episode);
                 if let (Ok(true), Ok(true)) = (
-                    fs::exists(episode_path.with_extension("mkv")),
-                    fs::exists(episode_path.with_extension("srt"))
+                    fs::exists(files::video_from_episode(&episode_path)),
+                    fs::exists(files::subtitles_from_episode(&episode_path))
                 ) {
                     let episode_meta = Arc::new(EpisodeMetadata {
                         inner: serde_saphyr::from_reader(
-                            File::open(episode_path.with_extension("yaml"))
+                            File::open(files::metadata_from_episode(&episode_path))
                                 .expect("unable to open episode metadata")
                         ).expect("unable to parse episode metadata"),
                         media: media_metadata.clone(),
                     });
 
                     let sub_index = SubData::parse_file(
-                        path!("{CONTENT_ROOT}/{media_name}/{episode}.srt"),
+                        files::episode_subtitles(&media_name, &episode),
                         episode_meta.clone()
                     );
 

@@ -1,11 +1,11 @@
-use std::collections::BTreeMap ;
+use std::{collections::BTreeMap, convert::identity, fs} ;
 
 use derive_more::{Display, From};
 use hypertext::{Buffer, context::Node, prelude::*};
 use rocket::{State, http::{Accept, MediaType, Status}, response::status::BadRequest, serde::json::Json};
 use srt_subtitles_parser::Timestamp;
 
-use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::util::{Html, Id, ImplicitHtml}};
+use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::{files, util::{Html, Id, ImplicitHtml}}};
 
 pub trait IntoHtmlOrJson: Sized {
     type JsonInner: Sized;
@@ -351,7 +351,14 @@ impl<'s> Renderable for SubDisplay<'s> {
                         subtitle.index
                     );
                     div .sub-display {
-                        a href=link { img src=link alt=(format!("\"{}\"", subtitle.text)); }
+                        @let quote = format!("\"{}\"", subtitle.text);
+                        @if fs::exists(
+                            files::artifact(self.media, self.episode, subtitle.index as usize)
+                        ).is_ok_and(identity) {
+                            a href=link { img src=link alt=quote; }
+                        } @else {
+                            a href=link { (quote) }
+                        }
                         br;
                         div {
                             " (" %(DispTime(&subtitle.start)) " - " %(DispTime(&subtitle.end)) ")"

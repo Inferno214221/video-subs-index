@@ -3,10 +3,25 @@ use std::{path::Path, process::Command, range::RangeInclusive, time::Duration};
 use ffmpeg_light::Time;
 use srt_subtitles_parser::{Subtitle, Timestamp};
 
+use crate::serve::files;
+
 pub fn convert_timestamp_with_offset(ts: &Timestamp, millis: i64) -> Time {
     Duration::from_millis(
         ts.to_ms().checked_add_signed(millis).unwrap()
     ).into()
+}
+
+pub fn slice_content(
+    media: impl AsRef<str>,
+    episode: impl AsRef<str>,
+    artifact: usize,
+    sub: &Subtitle
+) {
+    slice_video(
+        files::episode_subtitles(&media, &episode),
+        files::artifact(media, episode, artifact),
+        sub
+    );
 }
 
 pub fn slice_video(source: impl AsRef<Path>, target: impl AsRef<Path>, sub: &Subtitle) {

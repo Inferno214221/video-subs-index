@@ -2,10 +2,9 @@ use std::num::ParseIntError;
 
 use ct_regex::{Regex, regex};
 use derive_more::{Deref, Display, Error, From};
-use macron_path::path;
 use rocket::{State, http::uri::Origin, request::FromParam , response::status::Created, serde::json::Json};
 
-use crate::{generate::{index::MediaIndex, subtitle::Sub, video::slice_video}, serve::util::{CONTENT_ROOT, Gif, Id, ImplicitGif}};
+use crate::{generate::{index::MediaIndex, subtitle::Sub, video}, serve::{files, util::{Gif, Id, ImplicitGif}}};
 
 regex! {
     pub ArtifactPattern = r"(?<num>\d+)(.gif)?"
@@ -38,7 +37,7 @@ pub async fn view_content<'r>(
     artifact: ArtifactId,
     _gif: &ImplicitGif,
 ) -> Option<Gif> {
-    Gif::open(path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif")).await
+    Gif::open(files::artifact(media, episode, *artifact)).await
 }
 
 pub type CreatedSub<'s> = Created<Json<&'s Sub>>;
@@ -56,11 +55,7 @@ pub fn create_content<'s>(
         .list
         .get(*artifact - 1)?;
 
-    slice_video(
-        path!("{CONTENT_ROOT}/{media}/{episode}.mkv"),
-        path!("{CONTENT_ROOT}/{media}/{episode}/{artifact}.gif"),
-        sub
-    );
+    video::slice_content(media, episode, *artifact, sub);
 
     Some(
         Created::new(origin.path().as_str().to_owned())

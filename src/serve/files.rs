@@ -1,0 +1,87 @@
+use std::path::{Path, PathBuf};
+
+use macron_path::path;
+use rocket::fs::relative;
+
+pub const CONTENT_ROOT: &str = relative!("content");
+
+pub fn media_dir(media: impl AsRef<str>) -> PathBuf {
+    path!(
+        "{}/{}",
+        CONTENT_ROOT,
+        media.as_ref()
+    )
+}
+
+pub fn media_metadata(media: impl AsRef<str>) -> PathBuf {
+    path!(
+        "{}/{}.yaml",
+        CONTENT_ROOT,
+        media.as_ref()
+    )
+}
+
+pub fn metadata_from_media(media: impl AsRef<Path>) -> PathBuf {
+    media.as_ref().with_extension("yaml")
+}
+
+pub fn episode_dir(media: impl AsRef<str>, episode: impl AsRef<str>) -> PathBuf {
+    path!(
+        "{}/{}/{}",
+        CONTENT_ROOT,
+        media.as_ref(),
+        episode.as_ref()
+    )
+}
+
+pub fn episode_dir_from_media(media: impl AsRef<Path>, episode: impl AsRef<str>) -> PathBuf {
+    media.as_ref().join(episode.as_ref())
+}
+
+pub fn episode_subtitles(media: impl AsRef<str>, episode: impl AsRef<str>) -> PathBuf {
+    path!(
+        "{}/{}/{}.srt",
+        CONTENT_ROOT,
+        media.as_ref(),
+        episode.as_ref()
+    )
+}
+
+pub fn subtitles_from_episode(episode: impl AsRef<Path>) -> PathBuf {
+    episode.as_ref().with_extension("srt")
+}
+
+pub fn episode_video(media: impl AsRef<str>, episode: impl AsRef<str>) -> PathBuf {
+    path!(
+        "{}/{}/{}.mkv",
+        CONTENT_ROOT,
+        media.as_ref(),
+        episode.as_ref()
+    )
+}
+
+pub fn video_from_episode(episode: impl AsRef<Path>) -> PathBuf {
+    episode.as_ref().with_extension("mkv")
+}
+
+pub fn episode_metadata(media: impl AsRef<str>) -> PathBuf {
+    path!(
+        "{}/{}.yaml",
+        CONTENT_ROOT,
+        media.as_ref()
+    )
+}
+
+pub fn metadata_from_episode(media: impl AsRef<Path>) -> PathBuf {
+    media.as_ref().with_extension("yaml")
+}
+
+pub fn artifact(media: impl AsRef<str>, episode: impl AsRef<str>, artifact: usize) -> PathBuf {
+    path!(
+        "{}/{}/{}/{}.gif",
+        CONTENT_ROOT,
+        media.as_ref(),
+        episode.as_ref(),
+        artifact
+    )
+}

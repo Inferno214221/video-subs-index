@@ -18,7 +18,7 @@ pub fn slice_content(
     sub: &Subtitle
 ) {
     slice_video(
-        files::episode_subtitles(&media, &episode),
+        files::episode_video(&media, &episode),
         files::artifact(media, episode, artifact),
         sub
     );

@@ -357,10 +357,19 @@ impl<'s> Renderable for SubDisplay<'s> {
                         ).is_ok_and(identity) {
                             a href=link { img src=link alt=quote; }
                         } @else {
-                            a href=link { (quote) }
+                            div .sub-quote {
+                                span { (quote) }
+                                button .sub-generate
+                                    onclick=(format!(
+                                        "generate('{}', '{}', '{}')",
+                                        self.media,
+                                        self.episode,
+                                        subtitle.index
+                                    ))
+                                    { "Generate" }
+                            }
                         }
-                        br;
-                        div {
+                        div .sub-time {
                             " (" %(DispTime(&subtitle.start)) " - " %(DispTime(&subtitle.end)) ")"
                         }
                     }

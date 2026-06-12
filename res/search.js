@@ -21,3 +21,8 @@ function onChangeEpisode() {
     const episode = document.getElementById("search-episode").value;
     document.location = `/search/${media}/${episode}`;
 }
+
+async function generate(media, episode, id) {
+    await fetch(`/content/${media}/${episode}/${id}`, { method: "PUT" });
+    location.reload();
+}

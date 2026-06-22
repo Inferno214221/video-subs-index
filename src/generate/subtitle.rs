@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fs, iter, path::{Path, PathBuf}, sync::Arc};
 use ct_regex::{AnonRegex, regex};
 use derive_more::{Deref, DerefMut, Display};
 use serde::{Deserialize, Serialize};
-use srt_subtitles_parser::{self as srt, Subtitle};
+use srt_subtitles_parser as srt;
 
 pub fn normalize_sub(text: &str) -> String {
     let mut text = text.to_lowercase();
@@ -21,7 +21,7 @@ pub fn collect_words(text: &str) -> Vec<String> {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display)]
 #[display("{title}")]
-pub struct MediaMetadata {
+pub struct Media {
     pub name: String,
     pub title: String,
     pub icon: Option<PathBuf>,
@@ -37,20 +37,20 @@ pub struct EpisodeMetadataInner {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deref, Display)]
 #[display("S{}E{}: {}", inner.season, inner.number, inner.title)]
-pub struct EpisodeMetadata {
+pub struct Episode {
     #[deref]
     pub inner: EpisodeMetadataInner,
-    pub media: Arc<MediaMetadata>,
+    pub media: Arc<Media>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deref)]
-pub struct SubMetadata {
+pub struct Subtitle {
     #[deref]
-    pub subtitle: Subtitle,
-    pub episode: Arc<EpisodeMetadata>,
+    pub subtitle: srt::Subtitle,
+    pub episode: Arc<Episode>,
 }
 
-pub type Sub = Arc<SubMetadata>;
+pub type Sub = Arc<Subtitle>;
 
 #[derive(Debug, Default, Clone, Deref, DerefMut)]
 pub struct WordSeqBuilder(pub BTreeMap<usize, Vec<Sub>>);
@@ -154,17 +154,17 @@ impl SubIndex {
 }
 
 #[derive(Debug, Clone)]
-pub struct SubData {
+pub struct SubSet {
     pub list: Box<[Sub]>,
     pub index: SubIndex,
 }
 
-impl SubData {
-    pub fn parse_file(sub_path: impl AsRef<Path>, episode: Arc<EpisodeMetadata>) -> SubData {
+impl SubSet {
+    pub fn parse_file(sub_path: impl AsRef<Path>, episode: Arc<Episode>) -> SubSet {
         let list = srt::parse_srt(&fs::read_to_string(sub_path).unwrap()).unwrap()
             .subtitles
             .into_iter()
-            .map(|sub| Arc::new(SubMetadata {
+            .map(|sub| Arc::new(Subtitle {
                 subtitle: sub,
                 episode: episode.clone()
             }))
@@ -209,7 +209,7 @@ impl SubData {
                 .last();
         }
 
-        SubData {
+        SubSet {
             list,
             index: SubIndex(
                 words.into_iter()

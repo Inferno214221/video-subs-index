@@ -46,8 +46,7 @@ pub fn search_episode(
     index: &State<MediaIndex>,
     accept: Option<&Accept>,
 ) -> Option<HtmlOrJson<Vec<Sub>>> {
-    let data = index.sub_data.get(*media)?
-        .get(*episode)?;
+    let data = index.get_sub_set(*media, *episode);
 
     let mut results = if query.is_empty() {
         data.list.clone().into_vec()
@@ -124,9 +123,9 @@ pub fn search_media<'r>(
     index: &'r State<MediaIndex>,
     accept: Option<&'r Accept>,
 ) -> Option<HtmlOrJson<BTreeMap<&'r str, Vec<Sub>>>> {
-    let results = index.sub_data.get(*media)?
+    let results = index.episode_data.get(*media)?
         .iter()
-        .map(|(episode, data)| {
+        .map(|(episode, (_, data))| {
             let mut subs = data.index.search_with_query(query);
             subs.sort_by_key(|sub| sub.index);
             (episode.as_str(), subs)
@@ -271,16 +270,16 @@ impl<'i> Renderable for SearchPageForm<'i> {
                 select #search-media onchange="onChangeMedia()" {
                     @if let Some(selected_media) = self.media {
                         option value="" { "(No Media Source)" }
-                        @for media in self.index.sub_data.keys() {
-                            SelectedOption value=media selected=(media == selected_media) {
-                                %(self.index.get_media(media))
+                        @for (media_name, media) in self.index.media_data.iter() {
+                            SelectedOption value=media_name selected=(media_name == selected_media) {
+                                %(media)
                             }
                         }
                     } @else {
                         option value="" selected { "(No Media Source)" }
-                        @for media in self.index.sub_data.keys() {
-                            option value=media {
-                                %(self.index.get_media(media))
+                        @for (media_name, media) in self.index.media_data.iter() {
+                            option value=media_name {
+                                %(media)
                             }
                         }
                     }
@@ -289,21 +288,21 @@ impl<'i> Renderable for SearchPageForm<'i> {
                 select #search-episode onchange="onChangeEpisode()" {
                     option value="" { "(Any Episode)" }
                     @if let Some(selected_media) = self.media &&
-                        let Some(episodes) = self.index.sub_data.get(selected_media)
+                        let Some(episodes) = self.index.get_episodes(selected_media)
                     {
                         @if let Some(selected_episode) = self.episode {
-                            @for episode in episodes.keys() {
+                            @for (episode_name, episode) in episodes.iter() {
                                 SelectedOption
-                                    value=episode
-                                    selected=(episode == selected_episode)
+                                    value=episode_name
+                                    selected=(episode_name == &selected_episode)
                                 {
-                                    %(self.index.get_episode(episode))
+                                    %(episode)
                                 }
                             }
                         } @else {
-                            @for episode in episodes.keys() {
-                                option value=episode {
-                                    %(self.index.get_episode(episode))
+                            @for (episode_name, episode) in episodes.iter() {
+                                option value=episode_name {
+                                    %(episode)
                                 }
                             }
                         }
@@ -398,7 +397,7 @@ impl<'s> Renderable for SubDisplayWithEpisode<'s> {
             div {
                 @for episode in self.subs.keys() {
                     @if let Some(subs) = self.subs.get(episode) && !subs.is_empty() {
-                        h3 { %(self.index.get_episode(episode)) }
+                        h3 { %(self.index.get_episode(self.media, episode)) }
                         SubDisplay
                             media=(self.media)
                             episode=episode

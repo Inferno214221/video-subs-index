@@ -1,11 +1,11 @@
 use std::{path::Path, process::Command, range::RangeInclusive, time::Duration};
 
 use ffmpeg_light::Time;
-use srt_subtitles_parser::{Subtitle, Timestamp};
+use srt_subtitles_parser as srt;
 
 use crate::serve::files;
 
-pub fn convert_timestamp_with_offset(ts: &Timestamp, millis: i64) -> Time {
+pub fn convert_timestamp_with_offset(ts: &srt::Timestamp, millis: i64) -> Time {
     Duration::from_millis(
         ts.to_ms().checked_add_signed(millis).unwrap()
     ).into()
@@ -15,7 +15,7 @@ pub fn slice_content(
     media: impl AsRef<str>,
     episode: impl AsRef<str>,
     artifact: usize,
-    sub: &Subtitle
+    sub: &srt::Subtitle
 ) {
     slice_video(
         files::episode_video(&media, &episode),
@@ -24,14 +24,14 @@ pub fn slice_content(
     );
 }
 
-pub fn slice_video(source: impl AsRef<Path>, target: impl AsRef<Path>, sub: &Subtitle) {
+pub fn slice_video(source: impl AsRef<Path>, target: impl AsRef<Path>, sub: &srt::Subtitle) {
     slice_video_range(source, target, (sub..=sub).into());
 }
 
 pub fn slice_video_range(
     source: impl AsRef<Path>,
     target: impl AsRef<Path>,
-    sub_range: RangeInclusive<&Subtitle>
+    sub_range: RangeInclusive<&srt::Subtitle>
 ) {
     let RangeInclusive { start: first, last } = sub_range;
     // -ss and -to before -i slices the input before decoding. This is a requirement when applying

@@ -22,21 +22,19 @@ pub fn collect_words(text: &str) -> Vec<Box<str>> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display)]
 #[display("{title}")]
 pub struct Media {
-    pub name: Box<str>,
+    pub id: Box<str>,
     pub title: Box<str>,
     pub icon: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EpisodeMetadataInner {
-    pub name: Box<str>,
+    pub id: Box<str>,
     pub title: Box<str>,
-    pub season: u16,
-    pub number: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deref, Display)]
-#[display("S{}E{}: {}", inner.season, inner.number, inner.title)]
+#[display("{}: {}", inner.id.to_uppercase(), inner.title)]
 pub struct Episode {
     #[deref]
     pub inner: EpisodeMetadataInner,

@@ -15,14 +15,14 @@ pub fn media_dir(media: impl AsRef<str>) -> PathBuf {
 
 pub fn media_metadata(media: impl AsRef<str>) -> PathBuf {
     path!(
-        "{}/{}.yaml",
+        "{}/{}/metadata.yaml",
         CONTENT_ROOT,
         media.as_ref()
     )
 }
 
 pub fn metadata_from_media(media: impl AsRef<Path>) -> PathBuf {
-    media.as_ref().with_extension("yaml")
+    media.as_ref().join("metadata.yaml")
 }
 
 pub fn episode_dir(media: impl AsRef<str>, episode: impl AsRef<str>) -> PathBuf {
@@ -40,7 +40,7 @@ pub fn episode_dir_from_media(media: impl AsRef<Path>, episode: impl AsRef<str>)
 
 pub fn episode_subtitles(media: impl AsRef<str>, episode: impl AsRef<str>) -> PathBuf {
     path!(
-        "{}/{}/{}.srt",
+        "{}/{}/{}/subs.srt",
         CONTENT_ROOT,
         media.as_ref(),
         episode.as_ref()
@@ -48,12 +48,12 @@ pub fn episode_subtitles(media: impl AsRef<str>, episode: impl AsRef<str>) -> Pa
 }
 
 pub fn subtitles_from_episode(episode: impl AsRef<Path>) -> PathBuf {
-    episode.as_ref().with_extension("srt")
+    episode.as_ref().join("subs.srt")
 }
 
 pub fn episode_video(media: impl AsRef<str>, episode: impl AsRef<str>) -> PathBuf {
     path!(
-        "{}/{}/{}.mkv",
+        "{}/{}/{}/video.mkv",
         CONTENT_ROOT,
         media.as_ref(),
         episode.as_ref()
@@ -61,19 +61,19 @@ pub fn episode_video(media: impl AsRef<str>, episode: impl AsRef<str>) -> PathBu
 }
 
 pub fn video_from_episode(episode: impl AsRef<Path>) -> PathBuf {
-    episode.as_ref().with_extension("mkv")
+    episode.as_ref().join("video.mkv")
 }
 
 pub fn episode_metadata(media: impl AsRef<str>) -> PathBuf {
     path!(
-        "{}/{}.yaml",
+        "{}/{}/metadata.yaml",
         CONTENT_ROOT,
         media.as_ref()
     )
 }
 
 pub fn metadata_from_episode(media: impl AsRef<Path>) -> PathBuf {
-    media.as_ref().with_extension("yaml")
+    media.as_ref().join("metadata.yaml")
 }
 
 pub fn artifact(media: impl AsRef<str>, episode: impl AsRef<str>, artifact: usize) -> PathBuf {

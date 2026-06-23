@@ -13,7 +13,8 @@ pub fn list_subtitles<'s>(
     Some(Json(
         &index.episode_data.get(*media)?
             .get(*episode)?
-            .1.list
+            .subs
+            .list
     ))
 }
 

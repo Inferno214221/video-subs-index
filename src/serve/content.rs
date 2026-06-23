@@ -51,7 +51,8 @@ pub fn create_content<'s>(
     origin: &Origin,
 ) -> Option<CreatedSub<'s>> {
     let sub = index.episode_data.get(*media)?
-        .get(*episode)?.1
+        .get(*episode)?
+        .subs
         .list
         .get(*artifact - 1)?;
 

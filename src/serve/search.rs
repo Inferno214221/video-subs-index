@@ -46,7 +46,7 @@ pub fn search_episode(
     index: &State<MediaIndex>,
     accept: Option<&Accept>,
 ) -> Option<HtmlOrJson<Vec<Sub>>> {
-    let data = index.get_sub_set(*media, *episode);
+    let data = index.get_subs(*media, *episode);
 
     let mut results = if query.is_empty() {
         data.list.clone().into_vec()
@@ -125,8 +125,8 @@ pub fn search_media<'r>(
 ) -> Option<HtmlOrJson<BTreeMap<&'r str, Vec<Sub>>>> {
     let results = index.episode_data.get(*media)?
         .iter()
-        .map(|(episode, (_, data))| {
-            let mut subs = data.index.search_with_query(query);
+        .map(|(episode, data)| {
+            let mut subs = data.subs.index.search_with_query(query);
             subs.sort_by_key(|sub| sub.index);
             (&**episode, subs)
         })

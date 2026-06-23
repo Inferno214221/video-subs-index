@@ -2,9 +2,15 @@ use std::{collections::BTreeMap, ffi::{OsString}, fs::{self, File}, sync::Arc };
 
 use crate::{generate::subtitle::{Episode, Media, SubSet}, serve::files::{self, CONTENT_ROOT}};
 
+#[derive(Debug, Clone)]
+pub struct EpisodeData {
+    pub episode: Arc<Episode>,
+    pub subs: SubSet,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct MediaIndex {
-    pub episode_data: BTreeMap<Box<str>, BTreeMap<Box<str>, (Arc<Episode>, SubSet)>>,
+    pub episode_data: BTreeMap<Box<str>, BTreeMap<Box<str>, EpisodeData>>,
     pub media_data: BTreeMap<Box<str>, Arc<Media>>,
 }
 
@@ -70,7 +76,10 @@ impl MediaIndex {
                         episode_meta.clone()
                     );
 
-                    (episode, (episode_meta, sub_index))
+                    (episode, EpisodeData {
+                        episode: episode_meta,
+                        subs: sub_index
+                    })
                 } else {
                     panic!("missing required files for episode")
                 }
@@ -91,23 +100,25 @@ impl MediaIndex {
         &self.episode_data.get(media)
             .unwrap()
             .get(episode)
-            .unwrap().0
+            .unwrap()
+            .episode
     }
 
     pub fn get_episodes<'a>(&'a self, media: &str) -> Option<BTreeMap<&'a str, &'a Arc<Episode>>> {
         Some(
             self.episode_data.get(media)?
                 .iter()
-                .map(|(key, (episode, _))| (&**key, episode))
+                .map(|(key, data)| (&**key, &data.episode))
                 .collect()
         )
     }
 
-    pub fn get_sub_set(&self, media: &str, episode: &str) -> &SubSet {
+    pub fn get_subs(&self, media: &str, episode: &str) -> &SubSet {
         &self.episode_data.get(media)
             .unwrap()
             .get(episode)
-            .unwrap().1
+            .unwrap()
+            .subs
     }
 }
 

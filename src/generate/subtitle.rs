@@ -12,25 +12,25 @@ pub fn normalize_sub(text: &str) -> String {
     text
 }
 
-pub fn collect_words(text: &str) -> Vec<String> {
+pub fn collect_words(text: &str) -> Vec<Box<str>> {
     text.split(' ')
         .filter(|word| !word.is_empty())
-        .map(str::to_owned)
+        .map(Box::clone_from_ref)
         .collect::<Vec<_>>()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Display)]
 #[display("{title}")]
 pub struct Media {
-    pub name: String,
-    pub title: String,
+    pub name: Box<str>,
+    pub title: Box<str>,
     pub icon: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EpisodeMetadataInner {
-    pub name: String,
-    pub title: String,
+    pub name: Box<str>,
+    pub title: Box<str>,
     pub season: u16,
     pub number: u16,
 }
@@ -78,18 +78,18 @@ impl From<WordSeqBuilder> for WordSeq {
 
 #[derive(Debug, Clone, Default)]
 pub struct WordMapBuilder {
-    pub word: String,
+    pub word: Box<str>,
     pub metadata: WordSeqBuilder,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct WordMap {
-    pub word: String,
+    pub word: Box<str>,
     pub metadata: WordSeq,
 }
 
-impl From<(String, WordSeqBuilder)> for WordMapBuilder {
-    fn from((word, metadata): (String, WordSeqBuilder)) -> Self {
+impl From<(Box<str>, WordSeqBuilder)> for WordMapBuilder {
+    fn from((word, metadata): (Box<str>, WordSeqBuilder)) -> Self {
         WordMapBuilder { word, metadata }
     }
 }
@@ -105,12 +105,12 @@ pub struct SubIndex(pub Box<[WordMap]>);
 
 impl SubIndex {
     pub fn binary_search(&self, word: &str) -> Option<usize> {
-        self.binary_search_by_key(&word, |map| map.word.as_str()).ok()
+        self.binary_search_by_key(&word, |map| &map.word).ok()
     }
 
     pub fn find_next_word(&self, index: usize, word: &str) -> Option<usize> {
         self[index].metadata.keys()
-            .find(|&&key| self[key].word == word)
+            .find(|&&key| &*self[key].word == word)
             .copied()
     }
 
@@ -149,7 +149,7 @@ impl SubIndex {
 
     pub fn search_with_query(&self, query: &str) -> Vec<Sub> {
         let query_words = collect_words(&normalize_sub(query));
-        self.search_subs(query_words.iter().map(String::as_str))
+        self.search_subs(query_words.iter().map(Box::as_ref))
     }
 }
 
@@ -188,7 +188,7 @@ impl SubSet {
                             .cloned()
                             .zip(iter::repeat(WordSeqBuilder::default()))
                     })
-                    .collect::<BTreeMap<String, WordSeqBuilder>>()
+                    .collect::<BTreeMap<Box<str>, WordSeqBuilder>>()
                     .into_iter()
                     .map(WordMapBuilder::from)
             ).collect::<Box<[_]>>();

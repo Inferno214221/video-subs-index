@@ -128,7 +128,7 @@ pub fn search_media<'r>(
         .map(|(episode, (_, data))| {
             let mut subs = data.index.search_with_query(query);
             subs.sort_by_key(|sub| sub.index);
-            (episode.as_str(), subs)
+            (&**episode, subs)
         })
         .collect::<BTreeMap<_, _>>();
 
@@ -271,7 +271,7 @@ impl<'i> Renderable for SearchPageForm<'i> {
                     @if let Some(selected_media) = self.media {
                         option value="" { "(No Media Source)" }
                         @for (media_name, media) in self.index.media_data.iter() {
-                            SelectedOption value=media_name selected=(media_name == selected_media) {
+                            SelectedOption value=media_name selected=(&**media_name == selected_media) {
                                 %(media)
                             }
                         }

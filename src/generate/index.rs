@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, fs::{self, File}, sync::Arc, };
+use std::{collections::BTreeMap, ffi::{OsString}, fs::{self, File}, sync::Arc };
 
 use crate::{generate::subtitle::{Episode, Media, SubSet}, serve::files::{self, CONTENT_ROOT}};
 
 #[derive(Debug, Clone, Default)]
 pub struct MediaIndex {
-    pub episode_data: BTreeMap<String, BTreeMap<String, (Arc<Episode>, SubSet)>>,
-    pub media_data: BTreeMap<String, Arc<Media>>,
+    pub episode_data: BTreeMap<Box<str>, BTreeMap<Box<str>, (Arc<Episode>, SubSet)>>,
+    pub media_data: BTreeMap<Box<str>, Arc<Media>>,
 }
 
 impl MediaIndex {
@@ -18,7 +18,7 @@ impl MediaIndex {
         let mut media_index = MediaIndex::default();
 
         for media in media_entries {
-            let Ok(media_name) = media.file_name().into_string() else {
+            let Some(media_name) = media.file_name().into_boxed_str() else {
                 panic!("invalid media name")
             };
             if !media.file_type().unwrap().is_dir() {
@@ -43,7 +43,8 @@ impl MediaIndex {
                 .filter_map(
                     |entry| entry.file_type().ok().and_then(
                         |file_type| if file_type.is_dir() {
-                            entry.file_name().into_string().ok()
+                            entry.file_name()
+                                .into_boxed_str()
                         } else {
                             None
                         }
@@ -93,11 +94,11 @@ impl MediaIndex {
             .unwrap().0
     }
 
-    pub fn get_episodes<'a>(&'a self, media: &str) -> Option<BTreeMap<&'a String, &'a Arc<Episode>>> {
+    pub fn get_episodes<'a>(&'a self, media: &str) -> Option<BTreeMap<&'a str, &'a Arc<Episode>>> {
         Some(
             self.episode_data.get(media)?
                 .iter()
-                .map(|(key, (episode, _))| (key, episode))
+                .map(|(key, (episode, _))| (&**key, episode))
                 .collect()
         )
     }
@@ -107,5 +108,17 @@ impl MediaIndex {
             .unwrap()
             .get(episode)
             .unwrap().1
+    }
+}
+
+pub trait OsStringExt {
+    fn into_boxed_str(self) -> Option<Box<str>>;
+}
+
+impl OsStringExt for OsString {
+    fn into_boxed_str(self) -> Option<Box<str>> {
+        // I don't think this can be done without a clone. into_boxed_os_str can't be mapped without
+        // returning a sized value.
+        Some(Box::clone_from_ref(self.to_str()?))
     }
 }

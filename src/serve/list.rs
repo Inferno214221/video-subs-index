@@ -21,7 +21,7 @@ pub fn list_subtitles<'s>(
 pub fn list_episodes<'s>(
     media: Id,
     index: &'s State<MediaIndex>
-) -> Option<Json<BTreeMap<&'s String, &'s Arc<Episode>>>> {
+) -> Option<Json<BTreeMap<&'s str, &'s Arc<Episode>>>> {
     Some(Json(
         index.get_episodes(*media)?
     ))
@@ -30,6 +30,6 @@ pub fn list_episodes<'s>(
 #[get("/list")]
 pub fn list_media(
     index: &State<MediaIndex>
-) -> Option<Json<&BTreeMap<String, Arc<Media>>>> {
+) -> Option<Json<&BTreeMap<Box<str>, Arc<Media>>>> {
     Some(Json(&index.media_data))
 }

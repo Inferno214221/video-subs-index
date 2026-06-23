@@ -5,7 +5,7 @@ use hypertext::{Buffer, context::Node, prelude::*};
 use rocket::{State, http::{Accept, MediaType, Status}, response::status::BadRequest, serde::json::Json};
 use srt_subtitles_parser::Timestamp;
 
-use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::{files, util::{Html, Id, ImplicitHtml}}};
+use crate::{generate::{index::MediaIndex, subtitle::Sub}, serve::{ArtifactRange, files, util::{Html, Id, ImplicitHtml}}};
 
 pub trait IntoHtmlOrJson: Sized {
     type JsonInner: Sized;
@@ -358,7 +358,11 @@ impl<'s> Renderable for SubDisplay<'s> {
                     div .sub-display {
                         @let quote = format!("\"{}\"", subtitle.text);
                         @if fs::exists(
-                            files::artifact(self.media, self.episode, subtitle.index as usize)
+                            files::artifact(
+                                self.media,
+                                self.episode,
+                                ArtifactRange::single(subtitle.index as usize)
+                            )
                         ).is_ok_and(identity) {
                             a href=link { img src=link alt=quote; }
                         } @else {

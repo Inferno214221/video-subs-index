@@ -1,46 +1,64 @@
-use std::{path::Path, process::Command, range::RangeInclusive, time::Duration};
+use std::{path::Path, process::Command, time::Duration};
 
 use ffmpeg_light::Time;
 use srt_subtitles_parser as srt;
 
-use crate::serve::files;
+use crate::serve::{ArtifactRange, files};
 
-pub fn convert_timestamp_with_offset(ts: &srt::Timestamp, millis: i64) -> Time {
+const MAX_DURATION: Duration = Duration::from_secs(30);
+
+pub struct VidRange {
+    start: Time,
+    end: Time,
+}
+
+impl VidRange {
+    pub fn new(first: &srt::Subtitle, last: &srt::Subtitle) -> Option<VidRange> {
+        let start = convert_timestamp_with_offset(&first.start, 0);
+        let end = convert_timestamp_with_offset(&last.end, 0);
+
+        if end.checked_sub(start)? <= MAX_DURATION {
+            Some(VidRange {
+                start: start.into(),
+                end: end.into()
+            })
+        } else {
+            None
+        }
+    }
+}
+
+pub fn convert_timestamp_with_offset(ts: &srt::Timestamp, millis: i64) -> Duration {
     Duration::from_millis(
         ts.to_ms().checked_add_signed(millis).unwrap()
-    ).into()
+    )
 }
 
 pub fn slice_content(
     media: impl AsRef<str>,
     episode: impl AsRef<str>,
-    artifact: usize,
-    sub: &srt::Subtitle
+    artifact: ArtifactRange,
+    range: VidRange,
 ) {
     slice_video(
         files::episode_video(&media, &episode),
         files::artifact(media, episode, artifact),
-        sub
+        range
     );
 }
 
-pub fn slice_video(source: impl AsRef<Path>, target: impl AsRef<Path>, sub: &srt::Subtitle) {
-    slice_video_range(source, target, (sub..=sub).into());
-}
-
-pub fn slice_video_range(
+pub fn slice_video(
     source: impl AsRef<Path>,
     target: impl AsRef<Path>,
-    sub_range: RangeInclusive<&srt::Subtitle>
+    range: VidRange,
 ) {
-    let RangeInclusive { start: first, last } = sub_range;
     // -ss and -to before -i slices the input before decoding. This is a requirement when applying
     // palette generation, so that we only get the colors we need. It also offers a HUGE speedup.
     Command::new("ffmpeg")
         // Input start time
-        .arg("-ss").arg(convert_timestamp_with_offset(&first.start, 0).to_string())
+        .arg("-ss").arg(range.start.to_string())
         // Input end time
-        .arg("-to").arg(convert_timestamp_with_offset(&last.end, 0).to_string())
+        .arg("-to").arg(range.end.to_string())
         // Set input source
         .arg("-i").arg(source.as_ref())
         // Generate and use palette

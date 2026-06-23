@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use macron_path::path;
 use rocket::fs::relative;
 
+use crate::serve::ArtifactRange;
+
 pub const CONTENT_ROOT: &str = relative!("content");
 
 pub fn media_dir(media: impl AsRef<str>) -> PathBuf {
@@ -76,7 +78,11 @@ pub fn metadata_from_episode(media: impl AsRef<Path>) -> PathBuf {
     media.as_ref().join("metadata.yaml")
 }
 
-pub fn artifact(media: impl AsRef<str>, episode: impl AsRef<str>, artifact: usize) -> PathBuf {
+pub fn artifact(
+    media: impl AsRef<str>,
+    episode: impl AsRef<str>,
+    artifact: ArtifactRange
+) -> PathBuf {
     path!(
         "{}/{}/{}/{}.gif",
         CONTENT_ROOT,
